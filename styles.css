@@ -328,3 +328,5 @@ code.url { display: block; word-break: break-all; background: var(--fill); paddi
 
 @media (min-width: 700px) { .hero .grande { font-size: 56px; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.bienvenida .opcion .marca { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.3); display: grid; place-items: center; font-size: 14px; font-weight: 700; flex: none; }
+.bienvenida .opcion.on .marca { background: var(--green); border-color: var(--green); color: #000; }
