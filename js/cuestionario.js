@@ -20,26 +20,26 @@
       { v: 'diario', t: 'Cada día', sobres: [] }, { v: 'semanal', t: 'Cada semana', sobres: [] },
       { v: 'quincenal', t: 'Cada quincena', sobres: [] }, { v: 'mensual', t: 'Cada mes', sobres: [] }, { v: 'varia', t: 'Varía', sobres: [] }
     ] },
-    { id: 'mov', titulo: '¿Cómo te mueves normalmente?', multi: true, otro: { icono: '🚏', tipo: 'gasto' }, opciones: [
+    { id: 'mov', titulo: '¿Cómo te mueves normalmente?', multi: true, otro: { icono: '🚏', tipo: 'gasto', ph: 'Ej. Metro, Bici rentada' }, opciones: [
       { v: 'publico', t: '🚌 Transporte público', sobres: [sb('transporte', 'Transporte', '🚌', 'limite', 150, 30)] },
       { v: 'auto', t: '🚗 Auto o moto', sobres: [sb('gasolina', 'Gasolina', '⛽', 'gasto', 300, 31)] },
       { v: 'apps', t: '🚕 Apps de viaje o taxi', sobres: [sb('viajes', 'Viajes en app', '🚕', 'gasto', 100, 32)] },
       { v: 'pie', t: '🚶 Caminando o en bici', sobres: [] }
     ] },
-    { id: 'comida', titulo: '¿En qué gastas de comida?', multi: true, otro: { icono: '🍴', tipo: 'gasto' }, opciones: [
+    { id: 'comida', titulo: '¿En qué gastas de comida?', multi: true, otro: { icono: '🍴', tipo: 'gasto', ph: 'Ej. Cafetería, Comida rápida' }, opciones: [
       { v: 'fuera', t: '🍽️ Comer fuera o en la escuela/trabajo', sobres: [sb('comida', 'Comida', '🍽️', 'limite', 300, 20)] },
       { v: 'super', t: '🛒 Despensa o súper', sobres: [sb('despensa', 'Despensa', '🛒', 'gasto', 400, 21)] },
       { v: 'antojos', t: '☕ Antojos y snacks', sobres: [sb('antojos', 'Antojos', '☕', 'limite', 100, 40)] },
       { v: 'nada', t: 'Casi nada', sobres: [], excluye: true }
     ] },
-    { id: 'escuela', perfiles: ['estudiante'], titulo: 'En la escuela, ¿en qué gastas?', multi: true, otro: { icono: '📚', tipo: 'gasto' }, opciones: [
+    { id: 'escuela', perfiles: ['estudiante'], titulo: 'En la escuela, ¿en qué gastas?', multi: true, otro: { icono: '📚', tipo: 'gasto', ph: 'Ej. Uniforme, Libros' }, opciones: [
       { v: 'materiales', t: '📚 Materiales y proyectos', sobres: [sb('proyectos', 'Proyectos escolares', '📚', 'gasto', 300, 25, MES)] },
       { v: 'copias', t: '🖨️ Copias e impresiones', sobres: [sb('copias', 'Copias e impresiones', '🖨️', 'limite', 30, 26)] },
       { v: 'colegiatura', t: '🎓 Colegiatura o inscripción', sobres: [sb('colegiatura', 'Colegiatura', '🎓', 'gasto', 1200, 9, MESF)] },
       { v: 'eventos', t: '🎟️ Salidas o eventos escolares', sobres: [sb('eventos', 'Eventos escolares', '🎟️', 'gasto', 300, 41, MES)] },
       { v: 'nada', t: 'En nada', sobres: [], excluye: true }
     ] },
-    { id: 'trabajo', perfiles: ['diario'], titulo: 'Por tu trabajo, ¿gastas en…?', multi: true, otro: { icono: '💼', tipo: 'gasto' }, opciones: [
+    { id: 'trabajo', perfiles: ['diario'], titulo: 'Por tu trabajo, ¿gastas en…?', multi: true, otro: { icono: '💼', tipo: 'gasto', ph: 'Ej. Celular, Comidas del trabajo' }, opciones: [
       { v: 'ropa', t: '👔 Ropa o uniforme', sobres: [sb('ropatrabajo', 'Ropa de trabajo', '👔', 'gasto', 300, 27, MES)] },
       { v: 'herramientas', t: '🔧 Herramientas o equipo', sobres: [sb('herramientas', 'Herramientas', '🔧', 'gasto', 400, 28, MES)] },
       { v: 'nada', t: 'En nada', sobres: [], excluye: true }
@@ -48,7 +48,7 @@
     { id: 'servicios', titulo: '¿Pagas servicios como luz, agua, internet o celular?', opciones: siNo([sb('servicios', 'Servicios', '💡', 'gasto', 600, 6, MESF)]) },
     { id: 'subs', titulo: '¿Pagas suscripciones (música, series, apps)?', opciones: siNo([sb('suscripciones', 'Suscripciones', '📺', 'gasto', 300, 7, MESF)]) },
     { id: 'deuda', titulo: '¿Tienes alguna deuda o compra a plazos?', ayuda: 'Después pones cuánto debes y para cuándo.', opciones: siNo([sb('deuda', 'Deuda', '📅', 'deuda', 0, 1)]) },
-    { id: 'extra', titulo: '¿En qué más gastas seguido?', multi: true, otro: { icono: '⭐', tipo: 'gasto' }, opciones: [
+    { id: 'extra', titulo: '¿En qué más gastas seguido?', multi: true, otro: { icono: '⭐', tipo: 'gasto', ph: 'Ej. Lavandería, Barbería' }, opciones: [
       { v: 'gym', t: '🏋️ Gym o deporte', sobres: [sb('gym', 'Gym', '🏋️', 'gasto', 400, 50, MESF)] },
       { v: 'mascota', t: '🐶 Mascota', sobres: [sb('mascota', 'Mascota', '🐶', 'gasto', 400, 51, MES)] },
       { v: 'ropa', t: '👕 Ropa y cuidado personal', sobres: [sb('ropa', 'Ropa y cuidado personal', '👕', 'gasto', 400, 52, MES)] },
@@ -57,7 +57,7 @@
       { v: 'regalos', t: '🎁 Regalos y fechas especiales', sobres: [sb('regalos', 'Regalos', '🎁', 'ahorro', 50, 54)] }
     ] },
     { id: 'ocio', titulo: '¿Quieres un sobre para tus gustos y salidas?', ayuda: 'Es dinero que puedes gastar en lo que quieras.', def: 'si', opciones: siNo([sb('ocio', 'Ocio', '🎉', 'gasto', 200, 45, { disponible: true })]) },
-    { id: 'ahorro', titulo: '¿Para qué quieres ahorrar?', multi: true, def: ['emergencias'], otro: { icono: '🎯', tipo: 'ahorro' }, opciones: [
+    { id: 'ahorro', titulo: '¿Para qué quieres ahorrar?', multi: true, def: ['emergencias'], otro: { icono: '🎯', tipo: 'ahorro', ph: 'Ej. Viaje, Celular' }, opciones: [
       { v: 'emergencias', t: '🛟 Emergencias', sobres: [sb('colchon', 'Colchón', '🛟', 'ahorro', 100, 60)] },
       { v: 'meta', t: '🎯 Una meta (auto, viaje, celular…)', sobres: [sb('meta', 'Mi meta', '🎯', 'ahorro', 150, 61, { meta: 5000 })] },
       { v: 'imprevistos', t: '🧾 Gastos inesperados', sobres: [sb('imprevistos', 'Imprevistos', '🧾', 'gasto', 50, 44)] },
@@ -73,7 +73,7 @@
     ] },
     { id: 'negrenta', grupo: 'negocio', titulo: '¿Pagas renta por el local o el lugar?', opciones: siNo([sb('rentaneg', 'Renta del local', '🏠', 'gasto', 1500, 5, MESF)]) },
     { id: 'negreinv', grupo: 'negocio', titulo: '¿Quieres reinvertir una parte de cada venta o corte?', ayuda: 'Se aparta sola cada vez que registres un ingreso del negocio.', def: 'si', opciones: siNo([sb('reinversion', 'Reinversión', '📈', 'porIngreso', 100, 60)]) },
-    { id: 'negextra', grupo: 'negocio', titulo: '¿El negocio gasta en…?', multi: true, otro: { icono: '🧾', tipo: 'gasto' }, opciones: [
+    { id: 'negextra', grupo: 'negocio', titulo: '¿El negocio gasta en…?', multi: true, otro: { icono: '🧾', tipo: 'gasto', ph: 'Ej. Bolsas, Refacciones' }, opciones: [
       { v: 'envios', t: '🚚 Transporte o envíos', sobres: [sb('envios', 'Envíos', '🚚', 'gasto', 100, 30)] },
       { v: 'ayudantes', t: '👥 Pago a ayudantes', sobres: [sb('ayudantes', 'Ayudantes', '👥', 'gasto', 300, 10)] },
       { v: 'publicidad', t: '📣 Publicidad', sobres: [sb('publicidad', 'Publicidad', '📣', 'gasto', 200, 40, MES)] },
@@ -83,11 +83,11 @@
   ];
 
   App.OPC_CUENTAS = [
-    { v: 'efectivo', t: '💵 Efectivo', nombre: 'Efectivo', icono: '💵', partes: true },
-    { v: 'banco', t: '🏦 Banco o tarjeta de débito', nombre: 'Banco', icono: '🏦' },
-    { v: 'digital', t: '📱 App o cuenta digital', nombre: 'Cuenta digital', icono: '📱' },
-    { v: 'ahorro', t: '💰 Cuenta de ahorro', nombre: 'Ahorro', icono: '💰' },
-    { v: 'credito', t: '💳 Tarjeta de crédito', nombre: 'Tarjeta de crédito', icono: '💳', tipo: 'credito' }
+    { v: 'efectivo', t: '💵 Efectivo', nombre: 'Efectivo', icono: '💵', partes: true, desc: 'Billetes y monedas que traes contigo.' },
+    { v: 'banco', t: '🏦 Banco o tarjeta de débito', nombre: 'Banco', icono: '🏦', desc: 'Cuenta de un banco con sucursales: BBVA, Banorte, Santander…' },
+    { v: 'digital', t: '📱 App o cuenta digital', nombre: 'Cuenta digital', icono: '📱', desc: 'Apps o bancos solo en el celular: Mercado Pago, Revolut, Nu, Spin…' },
+    { v: 'ahorro', t: '💰 Cuenta de ahorro', nombre: 'Ahorro', icono: '💰', desc: 'Donde guardas dinero que no tocas, a veces con rendimiento.' },
+    { v: 'credito', t: '💳 Tarjeta de crédito', nombre: 'Tarjeta de crédito', icono: '💳', tipo: 'credito', desc: 'Dinero que te presta el banco y pagas después.' }
   ];
 
   const nuevoOb = () => ({ paso: 0, nombre: '', perfil: '', resp: {}, custom: {}, otro: '', otroTxt: '', negNombre: '', cuentas: ['efectivo', 'banco'], cuentasExtra: [], borrador: [], saldos: {}, tc: {}, negParte: '', acomodo: {}, destino: {} });
@@ -205,7 +205,7 @@
       (ob.custom[q.id] || []).forEach((o) => { h += chipOb(r.includes(o.v), 'data-q="' + q.id + '" data-v="' + o.v + '"', q.otro.icono + ' ' + U.esc(o.t)); });
       h += '<button class="chip otro" data-a="ob-otro" data-q="' + q.id + '">＋ Otro</button>';
     }
-    h += '</div>' + (q.otro ? filaOtro(ob, q.id, q.otro.tipo === 'ahorro' ? '¿Para qué? Ej. Viaje' : '¿En qué? Ej. Lavandería') : '');
+    h += '</div>' + (q.otro ? filaOtro(ob, q.id, q.otro.ph || 'Escribe cuál') : '');
     return h + '</div>';
   };
   const botones = (sig, txt) => '<div class="espaciador"></div><button class="btn" data-a="' + (sig || 'ob-sig') + '">' + (txt || 'Continuar') + '</button><button class="btn sec" data-a="ob-atras">Atrás</button>';
@@ -253,8 +253,12 @@
       h += botones();
     } else if (paso === 'cuentas') {
       h += '<h1>¿Dónde tienes tu dinero?</h1><p>Cada lugar será una cuenta. En efectivo puedes llevar billetes y monedas por separado.</p><div class="chips wrap" style="margin-top:12px">';
-      opcionesCuentas(ob).forEach((c) => { h += '<button class="chip ' + (ob.cuentas.includes(c.v) ? 'on' : '') + '" data-a="ob-cuenta" data-v="' + c.v + '">' + U.esc(c.t) + '</button>'; });
-      h += '<button class="chip otro" data-a="ob-otro" data-q="cuentas">＋ Otra</button></div>' + filaOtro(ob, 'cuentas', 'Ej. Revolut, Mercado Pago');
+      h = h.replace(/<div class="chips wrap" style="margin-top:12px">$/, '<div style="margin-top:8px">');
+      opcionesCuentas(ob).forEach((c) => {
+        const on = ob.cuentas.includes(c.v);
+        h += '<button class="opcion ' + (on ? 'on' : '') + '" data-a="ob-cuenta" data-v="' + c.v + '"><div class="ico">' + U.esc(c.icono) + '</div><div style="flex:1"><b>' + U.esc(c.t.replace(c.icono, '').trim()) + '</b><small>' + U.esc(c.desc || '') + '</small></div><span class="marca">' + (on ? '✓' : '') + '</span></button>';
+      });
+      h += '<div class="chips wrap" style="margin-top:12px"><button class="chip otro" data-a="ob-otro" data-q="cuentas">＋ Otra cuenta</button></div></div>' + filaOtro(ob, 'cuentas', 'Ej. Banco Azteca, Hey Banco');
       h += botones(ob.perfil === 'cero' ? 'ob-crear' : 'ob-sig');
     } else if (paso === 'revisar') {
       h += '<h1>Tus sobres</h1><p>Esto es lo que te propongo. Ajusta cuánto es, cada cuánto lo pagas y cada cuánto apartas.</p>';
@@ -264,7 +268,7 @@
         if (g !== grupoActual) { grupoActual = g; h += '<div class="etq" style="margin-top:22px">' + U.esc(g) + '</div>'; }
         h += '<div class="rev ' + (b.incluir ? '' : 'off') + '"><div class="rev-cab"><span class="rev-ico">' + b.icono + '</span>' +
           '<input class="rev-nombre" data-ob="' + i + '|nombre" value="' + U.esc(b.nombre) + '" maxlength="30">' +
-          '<span class="sw"><input type="checkbox" data-ob-inc="' + i + '" ' + (b.incluir ? 'checked' : '') + '><i></i></span></div>';
+          '<label class="sw"><input type="checkbox" data-ob-inc="' + i + '" ' + (b.incluir ? 'checked' : '') + '><i></i></label></div>';
         if (b.incluir) {
           const esGasto = b.tipo === 'gasto' || b.tipo === 'limite';
           if (b.tipo === 'deuda') {
@@ -378,7 +382,7 @@
     if (!txt) { ob.otro = ''; quedarse(); return; }
     const v = 'x' + Date.now().toString(36);
     if (ob.otro === 'cuentas') {
-      ob.cuentasExtra.push({ v, t: '🏦 ' + txt, nombre: txt, icono: '🏦' });
+      ob.cuentasExtra.push({ v, t: '🏦 ' + txt, nombre: txt, icono: '🏦', desc: 'Cuenta que agregaste.' });
       ob.cuentas.push(v);
     } else {
       const q = App.PREGUNTAS.find((x) => x.id === ob.otro);
