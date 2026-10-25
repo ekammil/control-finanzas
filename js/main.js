@@ -72,7 +72,7 @@
 
   const adivinarCuenta = (tarjeta) => {
     const t = (tarjeta || '').toLowerCase();
-    const c = App.state.cuentas.find((x) => t && t.includes(x.nombre.toLowerCase())) || App.state.cuentas.find((x) => x.icono === '🏦' || /banco|bbva|débito|debito|tarjeta/i.test(x.nombre));
+    const c = App.state.cuentas.find((x) => t && t.includes(x.nombre.toLowerCase())) || App.state.cuentas.find((x) => x.icono === '🏦' || /banco|débito|debito|tarjeta/i.test(x.nombre));
     return c ? c.id : App.ultimaCuenta('gasto');
   };
 
@@ -312,10 +312,11 @@
       if (String(App.h.txt).trim().toUpperCase() !== 'BORRAR') return App.toast('Escribe BORRAR para confirmar', 'error');
       if (!confirmar(el, 'Última oportunidad: toca otra vez')) return;
       localStorage.removeItem('control-finanzas-v1');
-      App.state = App.defaultState(); App.ui.ob = { paso: 0, nombre: '', plantilla: 'estudiante', saldos: {} };
+      App.state = App.defaultState(); App.ui.ob = App.nuevoOb ? App.nuevoOb() : { paso: 0 };
       App.cerrarHoja(true); App.ui.pantalla = 'inicio'; refrescar();
     }
   };
+  Object.assign(A, App.accionesExtra || {});
   App.acciones = A;
 
   document.addEventListener('click', (ev) => {
@@ -328,6 +329,7 @@
   /* entradas de texto */
   document.addEventListener('input', (ev) => {
     const el = ev.target;
+    if (!App.h && App.inputExtra && App.inputExtra(el, 'input')) return;
     if (el.dataset.m && App.h) {
       App.h[el.dataset.m] = el.type === 'checkbox' ? el.checked : el.value;
       return;
@@ -350,6 +352,7 @@
   });
   document.addEventListener('change', (ev) => {
     const el = ev.target;
+    if (!App.h && App.inputExtra && App.inputExtra(el, 'change')) return;
     if (el.dataset.m && App.h) {
       App.h[el.dataset.m] = el.type === 'checkbox' ? el.checked : el.value;
       if (el.dataset.render || el.tagName === 'SELECT') App.renderHoja();
