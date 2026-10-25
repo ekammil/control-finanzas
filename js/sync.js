@@ -10,9 +10,9 @@
     const s2 = e2 ? e2.sobres.find((x) => x.id === m.sobre2) : null;
     const c = App.cuenta(m.cuenta), c2 = App.cuenta(m.cuenta2);
     return {
-      id: m.id, fecha: m.fecha, tipo: m.tipo, monto: m.monto, nota: m.nota || '', origen: m.origen || '',
-      espacio: e ? e.nombre : '', sobre: s ? s.nombre : '', cuenta: c ? c.nombre : '',
-      espacio2: e2 ? e2.nombre : '', sobre2: s2 ? s2.nombre : '', cuenta2: c2 ? c2.nombre : '', creado: m.creado
+      id: m.id, fecha: m.fecha, tipo: m.tipo, monto: m.monto, nota: (m.nota || '') + (m.diferido ? ' (tarjeta, a pagar poco a poco)' : ''), origen: m.origen || '',
+      espacio: e ? e.nombre : '', sobre: s ? s.nombre : '', cuenta: c ? App.nombreCuenta(c.id, m.sub) : '',
+      espacio2: e2 ? e2.nombre : '', sobre2: s2 ? s2.nombre : '', cuenta2: c2 ? App.nombreCuenta(c2.id, m.sub2) : '', creado: m.creado
     };
   };
 

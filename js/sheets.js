@@ -71,6 +71,8 @@
 
   const chip = (on, accion, attrs, contenido, extraClase) => '<button class="chip ' + (on ? 'on ' : '') + (extraClase || '') + '" data-a="' + accion + '" ' + attrs + '>' + contenido + '</button>';
   App.chipHTML = chip;
+  const etqCuenta = (ct, monto) => U.esc(ct.icono) + ' ' + U.esc(ct.nombre) + (App.esCredito(ct) ? ' <small>crédito</small>' : '') + (monto !== undefined ? ' <small class="num">' + U.money0(monto) + '</small>' : '');
+  const segPartes = (accion, actual) => '<div class="seg" style="margin-top:8px"><button class="' + (actual !== 'm' ? 'on' : '') + '" data-a="' + accion + '" data-v="b">💵 Billetes</button><button class="' + (actual === 'm' ? 'on' : '') + '" data-a="' + accion + '" data-v="m">🪙 Monedas</button></div>';
 
   /* =============== REGISTRAR (gasto / ingreso / mover) =============== */
   App.HOJAS.registro = {
@@ -80,12 +82,13 @@
       const esp = App.espacioPrincipal();
       const h = Object.assign({
         modo: 'gasto', monto: '', espacio: esp ? esp.id : '', sobre: '', cuenta: App.ultimaCuenta(d.modo || 'gasto'), nota: '', fecha: U.today(),
-        reparto: true, editId: '', bandejaId: '', recId: '', recFecha: '', origen: 'app',
-        moverModo: 'espacios', cuenta2: '', espacio2: esp ? esp.id : '', sobre2: '', deSobre: ''
+        reparto: true, editId: '', bandejaId: '', recId: '', recFecha: '', sobrePago: '', origen: 'app',
+        moverModo: 'espacios', cuenta2: '', espacio2: esp ? esp.id : '', sobre2: '', deSobre: '',
+        sub: 'b', sub2: 'b', diferido: false, meses: 1
       }, d);
       if (d.editId) {
         const m = S.movs.find((x) => x.id === d.editId);
-        if (m) Object.assign(h, { modo: m.tipo, monto: String(m.monto), espacio: m.espacio, sobre: m.sobre, cuenta: m.cuenta, nota: m.nota, fecha: m.fecha, origen: m.origen });
+        if (m) Object.assign(h, { modo: m.tipo, monto: String(m.monto), espacio: m.espacio, sobre: m.sobre, cuenta: m.cuenta, nota: m.nota, fecha: m.fecha, origen: m.origen, sub: m.sub || 'b', diferido: !!m.diferido, meses: m.meses || 1 });
       }
       if (h.modo === 'mover' && !h.cuenta2) { const o = S.cuentas.find((c) => c.id !== h.cuenta); h.cuenta2 = o ? o.id : ''; }
       return h;
@@ -116,14 +119,25 @@
         if (h.modo === 'gasto') {
           const e = App.espacio(h.espacio);
           x += '<div class="etq">Sobre</div><div class="chips">';
-          if (e) e.sobres.filter((s) => s.tipo !== 'porIngreso').forEach((s) => {
+          if (e) e.sobres.filter((s) => s.tipo !== 'porIngreso' && s.tipo !== 'tarjeta').forEach((s) => {
             const st = c.sob[s.id];
             x += chip(h.sobre === s.id, 'reg-sobre', 'data-v="' + s.id + '"', U.esc(s.icono) + ' ' + U.esc(s.nombre) + ' <small class="num">' + U.money0(st ? st.saldo : 0) + '</small>');
           });
           x += chip(!h.sobre, 'reg-sobre', 'data-v=""', '🧾 Sin sobre <small class="num">' + U.money0(c.esp[h.espacio] ? c.esp[h.espacio].libre : 0) + '</small>') + '</div>';
         }
         x += '<div class="etq">' + (h.modo === 'gasto' ? 'Pagado con' : 'Entró a') + '</div><div class="chips">' +
-          S.cuentas.map((ct) => chip(h.cuenta === ct.id, 'reg-cuenta', 'data-v="' + ct.id + '"', U.esc(ct.icono) + ' ' + U.esc(ct.nombre))).join('') + '</div>';
+          S.cuentas.map((ct) => chip(h.cuenta === ct.id, 'reg-cuenta', 'data-v="' + ct.id + '"', etqCuenta(ct))).join('') + '</div>';
+        const cta = App.cuenta(h.cuenta);
+        if (cta && cta.partes) x += segPartes('reg-sub', h.sub);
+        if (h.modo === 'gasto' && App.esCredito(cta)) {
+          x += '<label class="interruptor" style="border:0;padding-bottom:0"><div class="txt"><b>Pagar poco a poco</b><small>' + (h.diferido ? 'Tu sobre no baja ahora: se aparta de tus ingresos ' + U.FREC_CADA[App.state.ajustes.frecIngreso] : 'Si no, sale de tu sobre en este momento') + '</small></div><span class="sw"><input type="checkbox" data-m="diferido" data-render="1" ' + (h.diferido ? 'checked' : '') + '><i></i></span></label>';
+          if (h.diferido) {
+            x += '<div class="seg" style="margin-top:8px">' + [[1, 'Próximo pago'], [3, '3 meses'], [6, '6 meses'], [12, '12 meses']].map(([n, t]) => '<button class="' + (Number(h.meses) === n ? 'on' : '') + '" data-a="reg-meses" data-v="' + n + '">' + t + '</button>').join('') + '</div>';
+            const plan = App.cuotasTarjeta(cta.id, h.fecha, App.montoNum(h) || 0, h.meses);
+            const ult = plan[plan.length - 1];
+            x += '<p class="nota" id="nota-dif">' + (App.montoNum(h) > 0 ? (plan.length > 1 ? plan.length + ' pagos de ' + U.money(plan[0].a) + ', del ' + U.fechaCorta(plan[0].f) + ' al ' + U.fechaCorta(ult.f) + '.' : 'Se paga el ' + U.fechaLarga(plan[0].f) + '.') + ' Se aparta poco a poco hasta esa fecha.' : 'Escribe el monto.') + '</p>';
+          }
+        }
         if (h.modo === 'ingreso' && !h.editId) {
           x += '<label class="interruptor" style="border:0;padding-bottom:0"><div class="txt"><b>Repartir en mis sobres</b><small>Llena lo que les falta esta semana</small></div><span class="sw"><input type="checkbox" data-m="reparto" ' + (h.reparto ? 'checked' : '') + '><i></i></span></label>';
         }
@@ -131,9 +145,12 @@
         // mover dinero
         x += '<div class="seg" style="margin-top:6px">' + [['espacios', 'Entre sobres'], ['cuentas', 'Entre cuentas']].map(([k, t]) => '<button class="' + (h.moverModo === k ? 'on' : '') + '" data-a="reg-mover-modo" data-v="' + k + '">' + t + '</button>').join('') + '</div>';
         if (h.moverModo === 'cuentas') {
-          x += '<div class="etq">De</div><div class="chips">' + S.cuentas.map((ct) => chip(h.cuenta === ct.id, 'reg-cuenta', 'data-v="' + ct.id + '"', U.esc(ct.icono) + ' ' + U.esc(ct.nombre) + ' <small class="num">' + U.money0(c.cuentas[ct.id]) + '</small>')).join('') + '</div>';
-          x += '<div class="etq">A</div><div class="chips">' + S.cuentas.filter((ct) => ct.id !== h.cuenta).map((ct) => chip(h.cuenta2 === ct.id, 'reg-cuenta2', 'data-v="' + ct.id + '"', U.esc(ct.icono) + ' ' + U.esc(ct.nombre))).join('') + '</div>';
-          x += '<p class="nota">Por ejemplo: depositar efectivo al banco. No cuenta como gasto ni ingreso.</p>';
+          const c1 = App.cuenta(h.cuenta), c2c = App.cuenta(h.cuenta2);
+          x += '<div class="etq">De</div><div class="chips">' + S.cuentas.map((ct) => chip(h.cuenta === ct.id, 'reg-cuenta', 'data-v="' + ct.id + '"', etqCuenta(ct, c.cuentas[ct.id]))).join('') + '</div>';
+          if (c1 && c1.partes) x += segPartes('reg-sub', h.sub);
+          x += '<div class="etq">A</div><div class="chips">' + S.cuentas.filter((ct) => ct.id !== h.cuenta || ct.partes).map((ct) => chip(h.cuenta2 === ct.id, 'reg-cuenta2', 'data-v="' + ct.id + '"', etqCuenta(ct))).join('') + '</div>';
+          if (c2c && c2c.partes) x += segPartes('reg-sub2', h.sub2);
+          x += '<p class="nota">' + (App.esCredito(c2c) ? 'Pagar la tarjeta no cambia tu Disponible: ese dinero ya estaba contado.' : h.cuenta === h.cuenta2 ? 'Cambiar billetes por monedas (o al revés). Tu total no cambia.' : 'Por ejemplo: depositar efectivo al banco. No cuenta como gasto ni ingreso.') + '</p>';
         } else {
           const lado = (espKey, sobKey, accionEsp, accionSob, etiqueta) => {
             let y = '<div class="etq">' + etiqueta + '</div>';
@@ -178,6 +195,7 @@
     if (v) v.innerHTML = App.montoTxt(h);
     const b = document.getElementById('btn-guardar');
     if (b) b.disabled = !(App.montoNum(h) > 0);
+    if (h.diferido && document.getElementById('nota-dif')) App.renderHoja();
   };
 
   App.guardarRegistro = () => {
@@ -186,9 +204,10 @@
     if (!(monto > 0)) return App.toast('Escribe un monto', 'error');
     if (h.modo === 'mover') {
       if (h.moverModo === 'cuentas') {
-        if (!h.cuenta || !h.cuenta2 || h.cuenta === h.cuenta2) return App.toast('Elige dos cuentas distintas', 'error');
-        App.addMov({ tipo: 'traspaso', monto, cuenta: h.cuenta, cuenta2: h.cuenta2, nota: h.nota, fecha: h.fecha });
-        App.toast(App.cuenta(h.cuenta).nombre + ' → ' + App.cuenta(h.cuenta2).nombre + ': ' + U.money(monto), 'ok');
+        const c1 = App.cuenta(h.cuenta), c2c = App.cuenta(h.cuenta2);
+        if (!c1 || !c2c || (h.cuenta === h.cuenta2 && (!c1.partes || h.sub === h.sub2))) return App.toast('Elige dos cuentas distintas', 'error');
+        App.addMov({ tipo: 'traspaso', monto, cuenta: h.cuenta, cuenta2: h.cuenta2, sub: c1.partes ? h.sub : '', sub2: c2c.partes ? h.sub2 : '', nota: h.nota, fecha: h.fecha });
+        App.toast(App.nombreCuenta(h.cuenta, h.sub) + ' → ' + App.nombreCuenta(h.cuenta2, h.sub2) + ': ' + U.money(monto), 'ok');
       } else {
         if (h.espacio === h.espacio2 && h.deSobre === h.sobre2) return App.toast('El origen y el destino son iguales', 'error');
         App.addMov({ tipo: 'mover', monto, espacio: h.espacio, sobre: h.deSobre, espacio2: h.espacio2, sobre2: h.sobre2, nota: h.nota, fecha: h.fecha });
@@ -197,7 +216,10 @@
     } else {
       if (!h.cuenta) return App.toast('Elige una cuenta', 'error');
       if (!h.espacio) return App.toast('Elige un espacio', 'error');
-      const datos = { tipo: h.modo, monto, espacio: h.espacio, sobre: h.modo === 'gasto' ? h.sobre : '', cuenta: h.cuenta, nota: (h.nota || '').trim(), fecha: h.fecha };
+      const cta = App.cuenta(h.cuenta);
+      const diferido = h.modo === 'gasto' && App.esCredito(cta) && !!h.diferido;
+      const datos = { tipo: h.modo, monto, espacio: h.espacio, sobre: h.modo === 'gasto' ? h.sobre : '', cuenta: h.cuenta, sub: cta && cta.partes ? (h.sub || 'b') : '', nota: (h.nota || '').trim(), fecha: h.fecha, diferido, meses: diferido ? Number(h.meses) || 1 : 0 };
+      if (diferido) App.sobreTarjeta(h.espacio, h.cuenta, true);
       if (h.editId) {
         App.updateMov(h.editId, datos);
         App.toast('Cambios guardados', 'ok');
@@ -209,13 +231,18 @@
           S.bandejaOk = (S.bandejaOk || []).concat([h.bandejaId]);
         }
         if (h.recId) { const rec = S.recurrentes.find((x) => x.id === h.recId); if (rec) rec.pagado = h.recFecha; }
+        if (h.sobrePago) { const sp = App.sobre(h.espacio, h.sobre); if (sp) sp.pagado = h.sobrePago; }
         App.save();
         if (h.modo === 'gasto') {
           const c = App.calc(h.fecha);
           const s = App.sobre(h.espacio, h.sobre);
-          if (s) {
+          if (diferido) {
+            const t = App.sobreTarjeta(h.espacio, h.cuenta, false);
+            const st = t ? c.sob[t.id] : null;
+            App.toast('A pagar poco a poco' + (st ? ' · ' + App.textoAporte(t, st) + (st.venc ? ' hasta el ' + U.fechaCorta(st.venc) : '') : ''), 'largo');
+          } else if (s) {
             const st = c.sob[s.id];
-            if ((s.tipo === 'gasto' || s.tipo === 'limite') && st.cuota > 0 && st.gastadoSemana > st.cuota) App.toast(s.nombre + ': te pasaste ' + U.money(st.gastadoSemana - st.cuota) + ' esta semana', 'error');
+            if ((s.tipo === 'gasto' || s.tipo === 'limite') && !s.fechaPago && st.M > 0 && st.gastadoCiclo > st.M) App.toast(s.nombre + ': te pasaste ' + U.money(st.gastadoCiclo - st.M) + ' ' + U.FREC_ESTE[U.frec(s.frecPago)], 'error');
             else App.toast('Guardado · ' + s.nombre + ': quedan ' + U.money(st.saldo), 'ok');
           } else App.toast('Gasto guardado · Libre: ' + U.money(c.esp[h.espacio].libre), 'ok');
         } else {
@@ -250,22 +277,45 @@
   };
 
   /* =============== CUADRE =============== */
+  // claves: "id" (cuenta normal o tarjeta) o "id:b" / "id:m" (billetes / monedas)
+  const esperadoCuadre = (clave, c) => {
+    const [id, sub] = clave.split(':');
+    if (sub) return c.partes[id] ? c.partes[id][sub] : 0;
+    const ct = App.cuenta(id);
+    return App.esCredito(ct) ? -c.cuentas[id] : c.cuentas[id];
+  };
+  // diferencia en el saldo de la cuenta (positivo = tienes más / debes menos)
+  App.difCuadre = (clave, valor, c) => {
+    const [id, sub] = clave.split(':');
+    const real = parseFloat(valor) || 0;
+    const esp = esperadoCuadre(clave, c);
+    return U.r2(!sub && App.esCredito(App.cuenta(id)) ? esp - real : real - esp);
+  };
+  App.textoCuadre = (clave, dif) => {
+    const credito = !clave.includes(':') && App.esCredito(App.cuenta(clave));
+    if (Math.abs(dif) < 0.005) return '✓ Cuadra';
+    if (credito) return dif > 0 ? 'Debes ' + U.money(dif) + ' menos' : 'Debes ' + U.money(-dif) + ' más';
+    return dif > 0 ? 'Tienes ' + U.money(dif) + ' de más' : 'Te faltan ' + U.money(-dif);
+  };
   App.HOJAS.cuadre = {
     titulo: 'Cuadre',
     init: () => ({ real: {} }),
     render: (h) => {
       const c = App.calc();
       let x = '<p class="nota" style="margin-top:0">Escribe cuánto tienes de verdad en cada cuenta. Si algo no cuadra, la app hace el ajuste por ti.</p>';
-      let difTotal = 0;
-      App.state.cuentas.forEach((ct) => {
-        const esperado = c.cuentas[ct.id];
-        const v = h.real[ct.id];
+      const campo = (clave, titulo) => {
+        const esperado = esperadoCuadre(clave, c);
+        const v = h.real[clave];
         const tiene = v !== undefined && v !== '';
-        const dif = tiene ? U.r2((parseFloat(v) || 0) - esperado) : 0;
-        difTotal += dif;
-        x += '<label class="campo"><span>' + U.esc(ct.icono) + ' ' + U.esc(ct.nombre) + ' · la app dice <b class="num">' + U.money(esperado) + '</b></span>' +
-          '<input inputmode="decimal" data-cuadre="' + ct.id + '" value="' + U.esc(v || '') + '" placeholder="' + U.money(esperado) + '">' +
-          '<small id="dif-' + ct.id + '" class="num ' + (dif > 0 ? 'pos' : dif < 0 ? 'neg' : '') + '">' + (tiene ? (Math.abs(dif) < 0.005 ? '✓ Cuadra' : (dif > 0 ? 'Tienes ' + U.money(dif) + ' de más' : 'Te faltan ' + U.money(-dif))) : 'Déjalo vacío si ya cuadra') + '</small></label>';
+        const dif = tiene ? App.difCuadre(clave, v, c) : 0;
+        return '<label class="campo"><span>' + titulo + ' · la app dice <b class="num">' + U.money(esperado) + '</b></span>' +
+          '<input inputmode="decimal" data-cuadre="' + clave + '" value="' + U.esc(v || '') + '" placeholder="' + U.money(esperado) + '">' +
+          '<small id="dif-' + clave.replace(':', '-') + '" class="num ' + (dif > 0 ? 'pos' : dif < 0 ? 'neg' : '') + '">' + (tiene ? App.textoCuadre(clave, dif) : 'Déjalo vacío si ya cuadra') + '</small></label>';
+      };
+      App.state.cuentas.forEach((ct) => {
+        if (ct.partes) { x += campo(ct.id + ':b', U.esc(ct.icono) + ' ' + U.esc(ct.nombre) + ' · billetes'); x += campo(ct.id + ':m', '🪙 ' + U.esc(ct.nombre) + ' · monedas'); }
+        else if (App.esCredito(ct)) x += campo(ct.id, U.esc(ct.icono) + ' ' + U.esc(ct.nombre) + ' · cuánto debes');
+        else x += campo(ct.id, U.esc(ct.icono) + ' ' + U.esc(ct.nombre));
       });
       x += '<button class="btn" data-a="cuadre-guardar">' + I.check + 'Guardar cuadre</button>';
       x += '<p class="nota">Los ajustes salen o entran a lo "Libre" de ' + U.esc((App.espacioPrincipal() || {}).nombre || 'tu espacio principal') + '. No tocan tus sobres.</p>';
@@ -276,12 +326,14 @@
   App.guardarCuadre = () => {
     const h = App.h; const c = App.calc(); const esp = App.espacioPrincipal();
     let n = 0, total = 0;
-    App.state.cuentas.forEach((ct) => {
-      const v = h.real[ct.id];
+    Object.keys(h.real).forEach((clave) => {
+      const v = h.real[clave];
       if (v === undefined || v === '') return;
-      const dif = U.r2((parseFloat(v) || 0) - c.cuentas[ct.id]);
+      const [id, sub] = clave.split(':');
+      if (!App.cuenta(id)) return;
+      const dif = App.difCuadre(clave, v, c);
       if (Math.abs(dif) < 0.005) return;
-      App.state.movs.push(App.nuevoMov({ tipo: 'ajuste', monto: dif, cuenta: ct.id, espacio: esp ? esp.id : '', nota: 'Cuadre' }));
+      App.state.movs.push(App.nuevoMov({ tipo: 'ajuste', monto: dif, cuenta: id, sub: sub || '', espacio: esp ? esp.id : '', nota: 'Cuadre' }));
       n++; total += dif;
     });
     App.state.ajustes.ultimoCuadre = U.today();

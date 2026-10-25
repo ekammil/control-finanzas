@@ -57,6 +57,10 @@
       (v > 0 ? '<circle cx="23" cy="23" r="' + r + '" stroke="' + color + '" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="' + (c * v).toFixed(1) + ' ' + c.toFixed(1) + '"/>' : '') + '</svg>';
   };
 
+  /* Pestañas de frecuencia: Diario · Semanal · Quincenal / Mensual · Semestral · Anual */
+  App.tabsFrec = (accion, actual, attrs, opciones) => '<div class="tabs-frec' + ((opciones || U.FRECS).length === 4 ? ' cuatro' : '') + '">' +
+    (opciones || U.FRECS).map((f) => '<button type="button" class="' + (f === actual ? 'on' : '') + '" data-a="' + accion + '" data-v="' + f + '" ' + (attrs || '') + '>' + U.FREC_TXT[f] + '</button>').join('') + '</div>';
+
   App.barraProg = (p, clase) => '<div class="barra-prog"><i class="' + (clase || '') + '" style="width:' + (U.clamp(p || 0, 0, 1) * 100).toFixed(1) + '%"></i></div>';
 
   /* Gráfica de línea suave del disponible */
@@ -132,20 +136,23 @@
     const sob = esp ? esp.sobres.find((s) => s.id === m.sobre) : null;
     const sob2 = esp2 ? esp2.sobres.find((s) => s.id === m.sobre2) : null;
     const cta = App.cuenta(m.cuenta), cta2 = App.cuenta(m.cuenta2);
-    const nCta = cta ? cta.nombre : '—';
+    const nCta = cta ? App.nombreCuenta(m.cuenta, m.sub) : '—';
     let icono = '•', titulo = '', sub = '', signo = 0, clase = '';
     if (m.tipo === 'gasto') {
       icono = sob ? sob.icono : '🧾';
       titulo = m.nota || (sob ? sob.nombre : 'Gasto');
-      sub = (m.nota ? (sob ? sob.nombre : 'Sin sobre') + ' · ' : '') + nCta; signo = -1;
+      sub = (m.nota ? (sob ? sob.nombre : 'Sin sobre') + ' · ' : '') + nCta + (m.diferido ? ' · a pagar poco a poco' : ''); signo = -1;
     } else if (m.tipo === 'ingreso') {
       icono = '💰'; titulo = m.nota || 'Ingreso'; sub = (App.state.espacios.length > 1 && esp ? esp.nombre + ' · ' : '') + nCta; signo = 1; clase = 'pos';
     } else if (m.tipo === 'inicial') {
-      icono = cta ? cta.icono : '🏁'; titulo = 'Saldo inicial'; sub = nCta; signo = 1;
+      icono = cta ? cta.icono : '🏁'; titulo = m.monto < 0 ? (m.nota || 'Deuda inicial') : 'Saldo inicial'; sub = nCta; signo = m.monto < 0 ? -1 : 1;
     } else if (m.tipo === 'ajuste') {
       icono = '⚖️'; titulo = m.nota || 'Ajuste'; sub = nCta; signo = m.monto >= 0 ? 1 : -1; clase = m.monto >= 0 ? 'pos' : 'neg';
     } else if (m.tipo === 'traspaso') {
-      icono = '↔️'; titulo = nCta + ' → ' + (cta2 ? cta2.nombre : '—'); sub = m.nota || 'Traspaso entre cuentas';
+      const n2 = cta2 ? App.nombreCuenta(m.cuenta2, m.sub2) : '—';
+      if (App.esCredito(cta2)) { icono = '💳'; titulo = 'Pago de tarjeta ' + cta2.nombre; sub = 'Desde ' + nCta + (m.nota && !/^Pago de tarjeta/.test(m.nota) ? ' · ' + m.nota : ''); }
+      else if (cta && cta2 && cta.id === cta2.id) { icono = '🪙'; titulo = App.subTxt(m.sub) + ' → ' + App.subTxt(m.sub2).toLowerCase(); sub = cta.nombre + (m.nota ? ' · ' + m.nota : ''); }
+      else { icono = '↔️'; titulo = nCta + ' → ' + n2; sub = m.nota || 'Traspaso entre cuentas'; }
     } else if (m.tipo === 'mover') {
       icono = sob2 ? sob2.icono : '↔️';
       const de = (esp && esp2 && esp.id !== esp2.id ? esp.nombre + ' ' : '') + (sob ? sob.nombre : 'Libre');

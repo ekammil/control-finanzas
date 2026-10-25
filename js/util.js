@@ -26,6 +26,76 @@
   U.weekStart = (s) => { const d = U.parse(s); const dow = (d.getDay() + 6) % 7; return U.addDays(s, -dow); }; // lunes
   U.dow = (s) => (U.parse(s).getDay() + 6) % 7; // 0 = lunes
 
+  /* ---------- frecuencias: diario, semanal, quincenal, mensual, semestral, anual ---------- */
+  U.FRECS = ['diario', 'semanal', 'quincenal', 'mensual', 'semestral', 'anual'];
+  U.FREC_TXT = { diario: 'Diario', semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual', semestral: 'Semestral', anual: 'Anual' };
+  U.FREC_CADA = { diario: 'cada día', semanal: 'cada semana', quincenal: 'cada quincena', mensual: 'cada mes', semestral: 'cada semestre', anual: 'cada año' };
+  U.FREC_ESTE = { diario: 'hoy', semanal: 'esta semana', quincenal: 'esta quincena', mensual: 'este mes', semestral: 'este semestre', anual: 'este año' };
+  U.FREC_POR = { diario: '/día', semanal: '/sem', quincenal: '/quincena', mensual: '/mes', semestral: '/semestre', anual: '/año' };
+  U.FREC_VECES = { diario: 365, semanal: 52, quincenal: 24, mensual: 12, semestral: 2, anual: 1 }; // veces por año
+  U.FREC_DIAS = { diario: 1, semanal: 7, quincenal: 15.2, mensual: 30.4, semestral: 182.6, anual: 365.2 };
+  U.frec = (f) => (U.FREC_VECES[f] ? f : 'semanal');
+  // convierte un monto de una frecuencia a otra (ej. $400 al mes → por día)
+  U.convertir = (monto, de, a) => (Number(monto) || 0) * U.FREC_VECES[U.frec(de)] / U.FREC_VECES[U.frec(a)];
+
+  const ultimoDia = (y, m) => new Date(y, m + 1, 0).getDate();
+  const fechaYMD = (y, m, d) => { const b = new Date(y, m, 1, 12); return U.ymd(new Date(b.getFullYear(), b.getMonth(), Math.min(d, ultimoDia(b.getFullYear(), b.getMonth())), 12)); };
+  U.addMonths = (s, n) => { const d = U.parse(s); return fechaYMD(d.getFullYear(), d.getMonth() + n, d.getDate()); };
+
+  /* Periodo de calendario que contiene la fecha: { ini, fin } (fin = día siguiente al último) */
+  U.periodo = (frec, s) => {
+    const d = U.parse(s); const y = d.getFullYear(), m = d.getMonth(), dia = d.getDate();
+    switch (U.frec(frec)) {
+      case 'diario': return { ini: s, fin: U.addDays(s, 1) };
+      case 'semanal': { const i = U.weekStart(s); return { ini: i, fin: U.addDays(i, 7) }; }
+      case 'quincenal': return dia <= 15 ? { ini: fechaYMD(y, m, 1), fin: fechaYMD(y, m, 16) } : { ini: fechaYMD(y, m, 16), fin: fechaYMD(y, m + 1, 1) };
+      case 'mensual': return { ini: fechaYMD(y, m, 1), fin: fechaYMD(y, m + 1, 1) };
+      case 'semestral': return m < 6 ? { ini: fechaYMD(y, 0, 1), fin: fechaYMD(y, 6, 1) } : { ini: fechaYMD(y, 6, 1), fin: fechaYMD(y + 1, 0, 1) };
+      default: return { ini: fechaYMD(y, 0, 1), fin: fechaYMD(y + 1, 0, 1) };
+    }
+  };
+
+  /* Cuántos periodos hay desde el que contiene "desde" hasta el que contiene "hasta" (incluidos) */
+  U.contarPeriodos = (frec, desde, hasta) => {
+    if (hasta < desde) return 0;
+    const a = U.parse(desde), b = U.parse(hasta);
+    const mes = (d) => d.getFullYear() * 12 + d.getMonth();
+    switch (U.frec(frec)) {
+      case 'diario': return U.daysBetween(desde, hasta) + 1;
+      case 'semanal': return Math.round(U.daysBetween(U.weekStart(desde), U.weekStart(hasta)) / 7) + 1;
+      case 'quincenal': { const q = (d) => mes(d) * 2 + (d.getDate() > 15 ? 1 : 0); return q(b) - q(a) + 1; }
+      case 'mensual': return mes(b) - mes(a) + 1;
+      case 'semestral': { const q = (d) => d.getFullYear() * 2 + (d.getMonth() >= 6 ? 1 : 0); return q(b) - q(a) + 1; }
+      default: return b.getFullYear() - a.getFullYear() + 1;
+    }
+  };
+
+  /* Fechas que se repiten a partir de una fecha ancla: k = 0 es el ancla, k = 1 la siguiente, k = -1 la anterior */
+  U.venc = (frec, ancla, k) => {
+    const d = U.parse(ancla); const y = d.getFullYear(), m = d.getMonth(), dia = d.getDate();
+    switch (U.frec(frec)) {
+      case 'diario': return U.addDays(ancla, k);
+      case 'semanal': return U.addDays(ancla, 7 * k);
+      case 'quincenal': {
+        const dias = dia <= 15 ? [dia, dia + 15] : [dia - 15, dia];
+        const t = (dia <= 15 ? 0 : 1) + k;
+        const half = ((t % 2) + 2) % 2;
+        return fechaYMD(y, m + Math.floor(t / 2), dias[half]);
+      }
+      case 'mensual': return fechaYMD(y, m + k, dia);
+      case 'semestral': return fechaYMD(y, m + 6 * k, dia);
+      default: return fechaYMD(y, m + 12 * k, dia);
+    }
+  };
+  /* Índice de la primera fecha de la serie que es >= desde */
+  U.vencIndice = (frec, ancla, desde) => {
+    let k = Math.floor(U.daysBetween(ancla, desde) / U.FREC_DIAS[U.frec(frec)]) - 2;
+    while (U.venc(frec, ancla, k) < desde) k++;
+    while (U.venc(frec, ancla, k - 1) >= desde) k--;
+    return k;
+  };
+  U.siguienteVenc = (frec, ancla, desde) => U.venc(frec, ancla, U.vencIndice(frec, ancla, desde));
+
   const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
   const DIAS_C = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
   const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];

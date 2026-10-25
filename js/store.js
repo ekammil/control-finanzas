@@ -4,12 +4,15 @@
   const App = window.App || (window.App = {});
 
   App.TIPOS_SOBRE = {
-    gasto: { nombre: 'Gasto semanal', desc: 'Recibe una cantidad cada semana. Lo que no gastes se acumula.' },
-    limite: { nombre: 'Gasto con tope', desc: 'Se rellena solo hasta el tope de la semana. Lo que sobre puede pasar a otro sobre el lunes.' },
-    ahorro: { nombre: 'Ahorro', desc: 'Guarda una cantidad cada semana. Puedes ponerle una meta.' },
-    deuda: { nombre: 'Pago con fecha', desc: 'Junta un total antes de una fecha. La cuota semanal se calcula sola.' },
+    gasto: { nombre: 'Gasto', desc: 'Lo que gastas o pagas cada cierto tiempo. Lo que no gastes se acumula.' },
+    limite: { nombre: 'Gasto con tope', desc: 'Se rellena solo hasta el tope de cada periodo. Lo que sobre puede pasar a otro sobre.' },
+    ahorro: { nombre: 'Ahorro', desc: 'Guarda una cantidad cada cierto tiempo. Puedes ponerle una meta y una fecha.' },
+    deuda: { nombre: 'Pago único', desc: 'Junta un total antes de una fecha (una deuda, una compra a plazos). El aporte se calcula solo.' },
     porIngreso: { nombre: 'Por cada ingreso', desc: 'Aparta una cantidad fija cada vez que registras un ingreso en este espacio.' }
   };
+  // "tarjeta" es un sobre interno: junta poco a poco lo que debes de compras a pagar después
+  App.TIPO_TARJETA = { nombre: 'Pago de tarjeta', desc: 'Junta poco a poco lo de tus compras con tarjeta de crédito que elegiste pagar después.' };
+  App.tipoSobre = (t) => App.TIPOS_SOBRE[t] || (t === 'tarjeta' ? App.TIPO_TARJETA : App.TIPOS_SOBRE.gasto);
 
   App.FONDOS = [
     { id: 'aurora', nombre: 'Aurora' },
@@ -20,10 +23,10 @@
     { id: 'negro', nombre: 'Negro' }
   ];
 
-  App.EMOJIS = ['👤', '🏪', '🎰', '💼', '🏠', '🍽️', '🚌', '🎉', '🚗', '🛟', '💳', '📅', '📦', '📈', '🎓', '💊', '🎁', '👕', '📱', '🐶', '✈️', '🏋️', '☕', '🎮', '🧾', '💡', '🛒', '🏦', '💵', '🪙', '💰', '🐷', '⭐', '🔧', '❤️', '📚'];
+  App.EMOJIS = ['👤', '🏪', '🎰', '💼', '🏠', '🍽️', '🚌', '🎉', '🚗', '🛟', '💳', '📅', '📦', '📈', '🎓', '💊', '🎁', '👕', '📱', '🐶', '✈️', '🏋️', '☕', '🎮', '🧾', '💡', '🛒', '🏦', '💵', '🪙', '💰', '🎯', '⭐', '🔧', '❤️', '📚'];
 
   App.defaultState = () => ({
-    v: 1,
+    v: 2,
     creado: Date.now(),
     perfil: { nombre: '' },
     ajustes: {
@@ -37,7 +40,8 @@
       syncUrl: '',
       ultimaSync: 0,
       onboarding: true,
-      rango: 'semana'
+      rango: 'semana',
+      frecIngreso: 'semanal'
     },
     cuentas: [],
     espacios: [],
@@ -50,18 +54,118 @@
   App.load = () => {
     let s = null;
     try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { s = null; }
+    // antes de actualizar datos viejos, guarda una copia intacta por si acaso
+    if (s && (s.v || 1) < 2 && Array.isArray(s.cuentas) && s.cuentas.length) {
+      try { localStorage.setItem(KEY + '-copia-v1', JSON.stringify(s)); } catch (e) { /* nada */ }
+    }
     App.state = App.migrate(s || App.defaultState());
+    if (s && (s.v || 1) < 2) App.save();
     return App.state;
   };
 
   App.migrate = (s) => {
     const d = App.defaultState();
+    const vieja = (s.v || 1) < 2;
     s.ajustes = Object.assign({}, d.ajustes, s.ajustes || {});
     s.perfil = Object.assign({}, d.perfil, s.perfil || {});
     ['cuentas', 'espacios', 'movs', 'recurrentes', 'bandeja', 'borrados'].forEach((k) => { if (!Array.isArray(s[k])) s[k] = []; });
-    s.espacios.forEach((e) => { if (!Array.isArray(e.sobres)) e.sobres = []; if (e.enDisponible === undefined) e.enDisponible = true; });
+    s.ajustes.frecIngreso = U.frec(s.ajustes.frecIngreso);
+    s.espacios.forEach((e) => {
+      if (!Array.isArray(e.sobres)) e.sobres = [];
+      if (e.enDisponible === undefined) e.enDisponible = true;
+      e.sobres.forEach((x) => {
+        if (!x.frecPago) x.frecPago = 'semanal';
+        if (x.frecAporte === undefined) x.frecAporte = x.tipo === 'tarjeta' ? '' : 'semanal';
+        if (x.fechaPago === undefined) x.fechaPago = '';
+        if (x.avisar === undefined || x.avisar === '') x.avisar = 2;
+        if (x.aporteManual === undefined) x.aporteManual = '';
+        if (x.creado === undefined) x.creado = '';
+        // el sobrante de la semana pasada ya se movió con la versión anterior
+        if (x.sobranteA && !x.cierre && s.ajustes.ultimoCierre) x.cierre = U.addDays(s.ajustes.ultimoCierre, -1);
+      });
+    });
+    s.cuentas.forEach((c) => { if (!c.tipo) c.tipo = 'normal'; });
+    if (vieja) {
+      // Efectivo ahora tiene billetes y monedas adentro; la cuenta "Monedas" se junta ahí
+      const ef = s.cuentas.find((c) => c.tipo === 'normal' && /^efectivo$/i.test(String(c.nombre).trim()));
+      if (ef) {
+        ef.partes = true;
+        const mon = s.cuentas.find((c) => c !== ef && c.tipo === 'normal' && /^monedas$/i.test(String(c.nombre).trim()));
+        if (mon) {
+          s.movs.forEach((m) => {
+            let cambio = false;
+            if (m.cuenta === ef.id && !m.sub) m.sub = 'b';
+            if (m.cuenta2 === ef.id && !m.sub2) m.sub2 = 'b';
+            if (m.cuenta === mon.id) { m.cuenta = ef.id; m.sub = 'm'; cambio = true; }
+            if (m.cuenta2 === mon.id) { m.cuenta2 = ef.id; m.sub2 = 'm'; cambio = true; }
+            if (cambio) m.sync = false;
+          });
+          s.recurrentes.forEach((r) => { if (r.cuenta === mon.id) r.cuenta = ef.id; });
+          s.cuentas = s.cuentas.filter((c) => c !== mon);
+        }
+      }
+    }
+    s.v = 2;
     return s;
   };
+
+  /* ---------- cuentas ---------- */
+  App.esCredito = (c) => !!c && c.tipo === 'credito';
+  App.subTxt = (sub) => (sub === 'm' ? 'Monedas' : 'Billetes');
+  App.nombreCuenta = (id, sub) => {
+    const c = App.cuenta(id);
+    if (!c) return '—';
+    return c.partes ? c.nombre + ' (' + App.subTxt(sub).toLowerCase() + ')' : c.nombre;
+  };
+  const diaDelMes = (y, m, dia) => { const b = new Date(y, m, 1, 12); const Y = b.getFullYear(), M = b.getMonth(); return U.ymd(new Date(Y, M, Math.min(dia, new Date(Y, M + 1, 0).getDate()), 12)); };
+  /* Corte y pago que le tocan a una compra hecha en "desde" */
+  App.fechaCorteYPago = (c, desde) => {
+    const dc = U.clamp(parseInt(c.diaCorte, 10) || 0, 0, 31), dp = U.clamp(parseInt(c.diaPago, 10) || 0, 0, 31);
+    if (!dc || !dp) return null;
+    const d = U.parse(desde); const y = d.getFullYear(); let m = d.getMonth();
+    let corte = diaDelMes(y, m, dc);
+    if (corte < desde) { m += 1; corte = diaDelMes(y, m, dc); }
+    return { corte, pago: dp > dc ? diaDelMes(y, m, dp) : diaDelMes(y, m + 1, dp) };
+  };
+  /* Siguiente día de pago de la tarjeta (hoy o después) */
+  App.proximoPagoTarjeta = (c, desde) => {
+    const dp = U.clamp(parseInt(c.diaPago, 10) || 0, 0, 31);
+    if (!dp) return '';
+    desde = desde || U.today();
+    const d = U.parse(desde);
+    const a = diaDelMes(d.getFullYear(), d.getMonth(), dp);
+    return a >= desde ? a : diaDelMes(d.getFullYear(), d.getMonth() + 1, dp);
+  };
+  /* Calendario de pagos de una compra a pagar poco a poco: [{ f, a }] */
+  App.cuotasTarjeta = (cuentaId, fecha, monto, meses) => {
+    const c = App.cuenta(cuentaId) || {};
+    const n = Math.max(1, parseInt(meses, 10) || 1);
+    const fp = App.fechaCorteYPago(c, fecha);
+    const primero = fp ? fp.pago : U.addDays(fecha, 30);
+    const out = [];
+    let resto = U.r2(monto);
+    for (let i = 0; i < n; i++) {
+      const a = i === n - 1 ? resto : U.r2(Math.floor((monto / n) * 100) / 100);
+      out.push({ f: i === 0 ? primero : U.addMonths(primero, i), a });
+      resto = U.r2(resto - a);
+    }
+    return out;
+  };
+  /* El sobre que junta lo de una tarjeta en un espacio (lo crea si no existe) */
+  App.sobreTarjeta = (espId, cuentaId, crear) => {
+    const e = App.espacio(espId); const c = App.cuenta(cuentaId);
+    if (!e || !c) return null;
+    let s = e.sobres.find((x) => x.tipo === 'tarjeta' && x.cuenta === cuentaId);
+    if (!s && crear) {
+      s = App.nuevoSobre({ nombre: 'Pagar ' + c.nombre, icono: '💳', tipo: 'tarjeta', cuenta: cuentaId, frecAporte: '' });
+      e.sobres.unshift(s);
+    }
+    return s;
+  };
+  App.nuevoSobre = (x) => Object.assign({
+    id: U.uid(), nombre: '', icono: '⭐', tipo: 'gasto', cuota: 0, meta: 0, desde: '', hasta: '', sobranteA: '', disponible: false,
+    frecPago: 'semanal', frecAporte: (App.state && App.state.ajustes.frecIngreso) || 'semanal', fechaPago: '', avisar: 2, aporteManual: '', creado: U.today()
+  }, x || {});
 
   let saveTimer = null;
   App.save = () => {
@@ -140,41 +244,45 @@
         agregar(s, Math.min(s.cuota, Math.max(0, libre), meta), 'Por ingreso');
       });
     }
-    // 2) lo que falta esta semana
+    // 2) lo que les falta en este periodo (primero lo que tiene fecha más cercana)
     const c = App.calc(fecha);
     let libre = c.esp[espId].libre;
     const lista = esp.sobres.map((s, i) => ({ s, i, st: c.sob[s.id] })).filter((x) => x.st && x.st.falta > 0);
-    lista.sort((a, b) => (a.s.tipo === 'deuda' ? 0 : 1) - (b.s.tipo === 'deuda' ? 0 : 1) || a.i - b.i);
+    const urge = (x) => (x.s.tipo === 'deuda' || x.s.tipo === 'tarjeta' || x.s.fechaPago ? 0 : 1);
+    lista.sort((a, b) => urge(a) - urge(b) || (urge(a) === 0 ? String(a.st.venc || '9').localeCompare(String(b.st.venc || '9')) : 0) || a.i - b.i);
     lista.forEach(({ s, st }) => {
       const x = U.r2(Math.min(st.falta, Math.max(0, libre)));
-      if (x > 0) { agregar(s, x, 'Reparto de la semana'); libre = U.r2(libre - x); }
+      if (x > 0) { agregar(s, x, 'Reparto'); libre = U.r2(libre - x); }
       if (x < st.falta) pendientes.push({ sobre: s.nombre, monto: U.r2(st.falta - x) });
     });
     return { partes, pendientes };
   };
 
-  /* Lunes: lo que sobró en sobres con "pasar sobrante a" se mueve al destino */
+  /* Al terminar cada periodo: lo que sobró en sobres con "pasar sobrante a" se mueve al destino */
   App.cierreSemanal = () => {
     const hoy = U.today();
-    const ini = U.weekStart(hoy);
     const a = App.state.ajustes;
-    if (!a.ultimoCierre) { a.ultimoCierre = ini; App.save(); return []; }
-    if (a.ultimoCierre >= ini) return [];
-    const domingo = U.addDays(ini, -1);
-    const c = App.calc(domingo);
     const hechos = [];
+    let cambio = false;
     App.state.espacios.forEach((e) => {
       e.sobres.forEach((s) => {
         if (!s.sobranteA) return;
-        const st = c.sob[s.id];
         const destino = e.sobres.find((x) => x.id === s.sobranteA);
-        if (!st || !destino || st.saldo <= 0) return;
-        App.state.movs.push(App.nuevoMov({ fecha: domingo, tipo: 'mover', monto: st.saldo, espacio: e.id, sobre: s.id, espacio2: e.id, sobre2: destino.id, nota: 'Sobrante de ' + s.nombre, origen: 'auto' }));
-        hechos.push({ de: s.nombre, a: destino.nombre, monto: st.saldo });
+        if (!destino) return;
+        const fin = App.finCicloAnterior(s, hoy);
+        if (!s.cierre) { s.cierre = fin; cambio = true; return; }
+        if (s.cierre >= fin) return;
+        const st = App.calc(fin).sob[s.id];
+        if (st && st.saldo > 0) {
+          App.state.movs.push(App.nuevoMov({ fecha: fin, tipo: 'mover', monto: st.saldo, espacio: e.id, sobre: s.id, espacio2: e.id, sobre2: destino.id, nota: 'Sobrante de ' + s.nombre, origen: 'auto' }));
+          hechos.push({ de: s.nombre, a: destino.nombre, monto: st.saldo });
+        }
+        s.cierre = fin; cambio = true;
       });
     });
-    a.ultimoCierre = ini;
-    App.save();
+    const ini = U.weekStart(hoy);
+    if (a.ultimoCierre !== ini) { a.ultimoCierre = ini; cambio = true; }
+    if (cambio) App.save();
     return hechos;
   };
 
@@ -199,14 +307,14 @@
   };
 
   /* ---------- plantillas para empezar ---------- */
-  const sob = (nombre, icono, tipo, cuota, extra) => Object.assign({ id: U.uid(), nombre, icono, tipo, cuota, meta: 0, desde: '', hasta: '', sobranteA: '', disponible: false }, extra || {});
+  const sob = (nombre, icono, tipo, cuota, extra) => App.nuevoSobre(Object.assign({ nombre, icono, tipo, cuota, frecAporte: 'semanal' }, extra || {}));
   App.PLANTILLAS = {
     estudiante: {
       nombre: 'Estudiante', desc: 'Comida, transporte, gustos y ahorro.',
       crear: () => {
-        const ahorro = sob('Ahorro', '🐷', 'ahorro', 100);
+        const ahorro = sob('Ahorro', '💰', 'ahorro', 100);
         return {
-          cuentas: [{ id: U.uid(), nombre: 'Banco', icono: '🏦' }, { id: U.uid(), nombre: 'Efectivo', icono: '💵' }],
+          cuentas: [{ id: U.uid(), nombre: 'Banco', icono: '🏦', tipo: 'normal' }, { id: U.uid(), nombre: 'Efectivo', icono: '💵', tipo: 'normal', partes: true }],
           espacios: [{ id: U.uid(), nombre: 'Personal', icono: '👤', enDisponible: true, sobres: [
             sob('Comida', '🍽️', 'limite', 300, { sobranteA: ahorro.id }),
             sob('Transporte', '🚌', 'limite', 150),
@@ -220,11 +328,11 @@
     negocio: {
       nombre: 'Con negocio', desc: 'Tu dinero personal separado del de tu negocio.',
       crear: () => ({
-        cuentas: [{ id: U.uid(), nombre: 'Banco', icono: '🏦' }, { id: U.uid(), nombre: 'Efectivo', icono: '💵' }],
+        cuentas: [{ id: U.uid(), nombre: 'Banco', icono: '🏦', tipo: 'normal' }, { id: U.uid(), nombre: 'Efectivo', icono: '💵', tipo: 'normal', partes: true }],
         espacios: [
           { id: U.uid(), nombre: 'Personal', icono: '👤', enDisponible: true, sobres: [
             sob('Comida', '🍽️', 'limite', 300), sob('Transporte', '🚌', 'limite', 150),
-            sob('Ocio', '🎉', 'gasto', 200, { disponible: true }), sob('Ahorro', '🐷', 'ahorro', 150)
+            sob('Ocio', '🎉', 'gasto', 200, { disponible: true }), sob('Ahorro', '💰', 'ahorro', 150)
           ] },
           { id: U.uid(), nombre: 'Negocio', icono: '🏪', enDisponible: false, sobres: [
             sob('Mercancía', '📦', 'gasto', 300), sob('Renta', '🏠', 'gasto', 100),
@@ -236,7 +344,7 @@
     cero: {
       nombre: 'Desde cero', desc: 'Solo una cuenta y un espacio. Tú armas tus sobres.',
       crear: () => ({
-        cuentas: [{ id: U.uid(), nombre: 'Efectivo', icono: '💵' }],
+        cuentas: [{ id: U.uid(), nombre: 'Efectivo', icono: '💵', tipo: 'normal', partes: true }],
         espacios: [{ id: U.uid(), nombre: 'Personal', icono: '👤', enDisponible: true, sobres: [] }]
       })
     }

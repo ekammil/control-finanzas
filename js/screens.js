@@ -31,6 +31,7 @@
       '<div class="mini-totales">' +
       '<div><span>Ahorrado</span><b class="num">' + U.moneyShort(c.tot.ahorro) + '</b></div>' +
       '<div><span>Apartado</span><b class="num">' + U.moneyShort(c.tot.apartado) + '</b></div>' +
+      (c.tot.deudaTarjeta > 0.004 ? '<div><span>Tarjetas</span><b class="num neg">−' + U.moneyShort(c.tot.deudaTarjeta) + '</b></div>' : '') +
       '<div><span>Total</span><b class="num">' + U.moneyShort(c.tot.total) + '</b></div>' +
       '</div></div>';
 
@@ -68,10 +69,14 @@
     // cuentas
     h += '<div class="seccion"><div class="seccion-titulo"><h2>Cuentas</h2><button data-a="hoja" data-h="cuadre">Cuadrar</button></div>';
     S.cuentas.forEach((ct) => {
+      const v = c.cuentas[ct.id];
+      let sub = '';
+      if (App.esCredito(ct)) { const pp = App.pagoTarjeta(ct, c); sub = v < -0.004 ? (pp && pp.monto > 0.004 ? 'Pagar ' + U.money0(pp.monto) + ' el ' + U.fechaCorta(pp.fecha) : 'Lo que debes') : 'Tarjeta de crédito'; }
+      else if (ct.partes && c.partes[ct.id]) sub = 'Billetes ' + U.money0(c.partes[ct.id].b) + ' · Monedas ' + U.money0(c.partes[ct.id].m);
       h += '<button class="fila" data-a="hoja" data-h="cuenta" data-id="' + ct.id + '">' +
         '<div class="ico">' + U.esc(ct.icono || '💳') + '</div>' +
-        '<div class="txt"><b>' + U.esc(ct.nombre) + '</b></div>' +
-        '<div class="der"><b class="num ' + (c.cuentas[ct.id] < -0.004 ? 'neg' : '') + '">' + U.money(c.cuentas[ct.id]) + '</b></div></button>';
+        '<div class="txt"><b>' + U.esc(ct.nombre) + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>' +
+        '<div class="der"><b class="num ' + (v < -0.004 ? 'neg' : '') + '">' + U.money(v) + '</b></div></button>';
     });
     h += '</div></div>';
     return h;
@@ -95,22 +100,26 @@
         '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" data-h="resumen">Ver resumen</button><button class="btn-chico" data-a="resumen-ok">Listo</button></div></div></div>');
     }
     // pagos próximos
-    App.proximosPagos().forEach((p) => {
+    App.proximosPagos(c).forEach((p) => {
       const av = Number(p.r.avisar);
       if (p.dias > (isNaN(av) ? 3 : av)) return;
       const st = p.r.sobre ? c.sob[p.r.sobre] : null;
       const tiene = st ? st.saldo : null;
       const cuando = p.dias === 0 ? 'hoy' : p.dias === 1 ? 'mañana' : 'en ' + p.dias + ' días';
       let estado = '';
-      if (tiene !== null) estado = tiene >= p.r.monto ? '<span class="ok">Ya lo tienes apartado.</span>' : '<span class="cuidado">Te faltan ' + U.money(p.r.monto - tiene) + ' en el sobre.</span>';
-      out.push('<div class="aviso"><div class="ico">' + I.cal + '</div><div class="txt"><b>' + U.esc(p.r.nombre) + ' · ' + U.money(p.r.monto) + '</b><p>Se paga ' + cuando + ' (' + U.fechaCorta(p.fecha) + '). ' + estado + '</p>' +
-        '<div class="acciones"><button class="btn-chico blanco" data-a="pagar-rec" data-id="' + p.r.id + '" data-f="' + p.fecha + '">Registrar pago</button></div></div></div>');
+      if (p.tipo === 'tarjeta') estado = p.r.estimado ? 'Aproximado, el corte aún no llega.' : 'Para no pagar intereses.';
+      else if (tiene !== null) estado = tiene >= p.r.monto - 0.004 ? '<span class="ok">Ya lo tienes apartado.</span>' : '<span class="cuidado">Llevas ' + U.money(Math.max(0, tiene)) + ' apartado.</span>';
+      const boton = p.tipo === 'rec' ? '<button class="btn-chico blanco" data-a="pagar-rec" data-id="' + p.r.id + '" data-f="' + p.fecha + '">Registrar pago</button>'
+        : p.tipo === 'tarjeta' ? '<button class="btn-chico blanco" data-a="pagar-tarjeta" data-id="' + p.r.cuenta + '">Pagar tarjeta</button>'
+          : '<button class="btn-chico blanco" data-a="pagar-sobre" data-esp="' + p.r.espacio + '" data-id="' + p.r.id + '" data-f="' + (p.tipo === 'sobre' ? p.fecha : '') + '" data-monto="' + p.r.monto + '">Registrar pago</button>';
+      out.push('<div class="aviso"><div class="ico">' + (p.tipo === 'tarjeta' ? '💳' : I.cal) + '</div><div class="txt"><b>' + U.esc(p.r.nombre) + ' · ' + U.money(p.r.monto) + '</b><p>Se paga ' + cuando + ' (' + U.fechaCorta(p.fecha) + '). ' + estado + '</p>' +
+        '<div class="acciones">' + boton + '</div></div></div>');
     });
     // dinero libre sin repartir
     S.espacios.forEach((e) => {
       const x = c.esp[e.id];
       if (x.libre > 0.5 && x.falta > 0.5) {
-        out.push('<div class="aviso"><div class="ico">✨</div><div class="txt"><b>Tienes ' + U.money(x.libre) + ' libres en ' + U.esc(e.nombre) + '</b><p>A tus sobres les faltan ' + U.money(x.falta) + ' esta semana.</p>' +
+        out.push('<div class="aviso"><div class="ico">✨</div><div class="txt"><b>Tienes ' + U.money(x.libre) + ' libres en ' + U.esc(e.nombre) + '</b><p>A tus sobres les faltan ' + U.money(x.falta) + ' por ahora.</p>' +
           '<div class="acciones"><button class="btn-chico blanco" data-a="repartir" data-id="' + e.id + '">Repartir</button></div></div></div>');
       } else if (x.libre < -0.5) {
         out.push('<div class="aviso"><div class="ico">⚠️</div><div class="txt"><b>' + U.esc(e.nombre) + ': libre en ' + U.money(x.libre) + '</b><p>Gastaste más de lo que tenías libre. Se cubre con tu siguiente ingreso.</p></div></div>');
@@ -182,21 +191,23 @@
       let actual, objetivo, sub, pie1, pie2, clase = '';
       if (s.tipo === 'deuda') {
         actual = x.pagado + Math.max(0, x.saldo); objetivo = s.meta;
-        sub = 'Pago con fecha · ' + U.esc(e.nombre);
+        sub = 'Pago único · ' + U.esc(e.nombre);
         pie1 = 'Pagado ' + U.money0(x.pagado) + ' · Apartado ' + U.money0(x.saldo);
         pie2 = s.hasta ? 'Límite ' + U.fechaCorta(s.hasta) : '';
         clase = x.falta > 0 ? 'cuidado' : '';
       } else {
         actual = Math.max(0, x.saldo); objetivo = s.meta;
-        sub = App.TIPOS_SOBRE[s.tipo].nombre + ' · ' + U.esc(e.nombre);
+        sub = App.tipoSobre(s.tipo).nombre + ' · ' + U.esc(e.nombre);
         const resta = Math.max(0, objetivo - actual);
-        const ritmo = s.tipo === 'porIngreso' ? 0 : Number(s.cuota) || 0;
+        const ritmo = s.tipo === 'porIngreso' ? 0 : Number(x.cuota) || 0;
+        const ritmoSem = U.convertir(ritmo, x.frecAporte, 'semanal');
         if (resta <= 0) pie1 = '¡Meta lograda! 🎉';
-        else if (ritmo > 0) {
-          const sem = Math.ceil(resta / ritmo);
+        else if (s.hasta) pie1 = 'Faltan ' + U.money0(resta) + ' · para el ' + U.fechaCorta(s.hasta);
+        else if (ritmoSem > 0) {
+          const sem = Math.ceil(resta / ritmoSem);
           pie1 = 'Faltan ' + U.money0(resta) + ' · ~' + (sem > 104 ? Math.round(sem / 52) + ' años' : sem > 8 ? Math.round(sem / 4.33) + ' meses' : sem + ' semanas');
         } else pie1 = 'Faltan ' + U.money0(resta);
-        pie2 = ritmo > 0 ? U.money0(ritmo) + '/semana' : s.tipo === 'porIngreso' ? U.money0(s.cuota) + ' por ingreso' : '';
+        pie2 = ritmo > 0 ? U.money0(ritmo) + U.FREC_POR[x.frecAporte] : s.tipo === 'porIngreso' ? U.money0(s.cuota) + ' por ingreso' : '';
         clase = 'azul';
       }
       const p = objetivo > 0 ? actual / objetivo : 0;
@@ -208,14 +219,15 @@
     });
 
     // pagos programados
-    h += '<div class="seccion"><div class="seccion-titulo"><h2>Pagos programados</h2><button data-a="hoja" data-h="recurrente">Agregar</button></div>';
-    const prox = App.proximosPagos();
-    if (!prox.length) h += '<div class="nota">Agrega tus pagos que se repiten (renta, colegiatura, tarjeta de crédito, suscripciones) y la app te avisará antes de cada cobro.</div>';
+    h += '<div class="seccion"><div class="seccion-titulo"><h2>Próximos pagos</h2><button data-a="hoja" data-h="recurrente">Agregar</button></div>';
+    const prox = App.proximosPagos(c);
+    if (!prox.length) h += '<div class="nota">Ponle fecha de pago a tus sobres (renta, colegiatura, gym…) o agrega una tarjeta de crédito, y la app te avisará antes de cada pago.</div>';
     prox.forEach((p) => {
       const cuando = p.dias === 0 ? 'Hoy' : p.dias === 1 ? 'Mañana' : U.fechaCorta(p.fecha);
-      const frec = { mensual: 'Cada mes', quincenal: 'Cada quincena', semanal: 'Cada semana' }[p.r.frecuencia] || '';
-      h += '<button class="fila" data-a="hoja" data-h="recurrente" data-id="' + p.r.id + '"><div class="ico">' + I.cal.replace('<svg', '<svg style="width:19px;height:19px"') + '</div>' +
-        '<div class="txt"><b>' + U.esc(p.r.nombre) + '</b><small>' + frec + ' · próximo: ' + cuando + '</small></div><div class="der"><b class="num">' + U.money(p.r.monto) + '</b></div></button>';
+      const frec = p.tipo === 'rec' ? ({ mensual: 'Cada mes', quincenal: 'Cada quincena', semanal: 'Cada semana' }[p.r.frecuencia] || '') : p.tipo === 'sobre' ? U.FREC_TXT[U.frec(p.r.frec)] : p.tipo === 'deuda' ? 'Pago único' : 'Tarjeta' + (p.r.estimado ? ' · aprox.' : '');
+      const attrs = p.tipo === 'rec' ? 'data-h="recurrente" data-id="' + p.r.id + '"' : p.tipo === 'tarjeta' ? 'data-h="cuenta" data-id="' + p.r.cuenta + '"' : 'data-h="sobre" data-esp="' + p.r.espacio + '" data-id="' + p.r.id + '"';
+      h += '<button class="fila" data-a="hoja" ' + attrs + '><div class="ico">' + (p.tipo === 'tarjeta' ? '💳' : I.cal.replace('<svg', '<svg style="width:19px;height:19px"')) + '</div>' +
+        '<div class="txt"><b>' + U.esc(p.r.nombre) + '</b><small>' + frec + ' · ' + cuando + '</small></div><div class="der"><b class="num">' + U.money(p.r.monto) + '</b></div></button>';
     });
     h += '</div></div>';
     return h;
@@ -234,7 +246,8 @@
     h += '<div class="seccion"><div class="seccion-titulo"><h2>Organización</h2></div>' +
       fila('hoja', I.layers, 'Espacios y sobres', S.espacios.length + ' espacios · ' + S.espacios.reduce((n, e) => n + e.sobres.length, 0) + ' sobres', 'data-h="organizar"') +
       fila('hoja', I.wallet, 'Cuentas', S.cuentas.map((c) => c.nombre).join(', ') || 'Ninguna', 'data-h="cuentas"') +
-      fila('ir', I.cal, 'Pagos programados', S.recurrentes.length + ' pagos', 'data-p="metas"') + '</div>';
+      fila('hoja', I.cal, 'Cada cuánto recibes dinero', U.FREC_TXT[a.frecIngreso] || 'Semanal', 'data-h="frec-ingreso"') +
+      fila('ir', I.target, 'Próximos pagos', 'Fechas de pago y avisos', 'data-p="metas"') + '</div>';
     h += '<div class="seccion"><div class="seccion-titulo"><h2>Hábitos</h2></div>' +
       sw('cuadreNoche', 'Cuadre de la noche', 'Después de las 8 pm te sugiere revisar tu dinero real') +
       sw('vibracion', 'Vibración', 'Al guardar un movimiento') + '</div>';
@@ -246,7 +259,7 @@
       fila('hoja', I.phone, 'Instalar en tu teléfono', 'iPhone y Android', 'data-h="instalar"') +
       fila('hoja', I.apple, 'Atajo de Apple Pay', 'Solo iPhone', 'data-h="atajo"') + '</div>';
     h += '<div class="seccion"><button class="btn peligro" data-a="hoja" data-h="borrar">Borrar todos mis datos</button>' +
-      '<p class="nota" style="text-align:center">Control de Finanzas · v1.0 · Tus datos viven en este teléfono.</p></div>';
+      '<p class="nota" style="text-align:center">Control de Finanzas · v1.2 · Tus datos viven en este teléfono.</p></div>';
     h += '</div>';
     return h;
   };
