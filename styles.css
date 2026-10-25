@@ -74,7 +74,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .delta.flat { color: var(--text-2); background: var(--fill); }
 .delta svg { width: 14px; height: 14px; }
 .delta-sub { color: var(--text-3); font-size: 13px; margin-left: 6px; }
-.mini-totales { display: flex; gap: 22px; margin-top: 18px; }
+.mini-totales { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 18px; }
 .mini-totales div { display: flex; flex-direction: column; gap: 2px; }
 .mini-totales span { color: var(--text-2); font-size: 12.5px; }
 .mini-totales b { font-size: 16px; font-weight: 600; }
@@ -284,6 +284,33 @@ input, select, textarea { font: inherit; color: inherit; }
 .rev-nombre:focus { border-bottom-color: rgba(255,255,255,.3); }
 .rev .campo { margin-top: 8px; }
 .rev .campo input { height: 42px; }
+
+/* frecuencias, aportes, cuentas */
+.tabs-frec { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; background: var(--fill); border-radius: 12px; padding: 3px; margin-top: 8px; }
+.tabs-frec.cuatro { grid-template-columns: repeat(4, 1fr); }
+.tabs-frec button { padding: 8px 2px; border-radius: 10px; font-size: 13.5px; font-weight: 600; color: var(--text-2); transition: background .2s, color .2s; }
+.tabs-frec button.on { background: rgba(255,255,255,.16); color: var(--text); }
+.calc-aporte { margin-top: 10px; padding: 12px 14px; border-radius: 14px; background: rgba(61, 220, 151, .08); color: var(--text-2); font-size: 14.5px; }
+.calc-aporte b { color: var(--green); font-weight: 650; }
+.calc-aporte small { display: block; color: var(--text-3); font-size: 12.5px; margin-top: 3px; }
+.sub-etq { font-size: 13px; color: var(--text-2); margin: 12px 0 0; }
+.otro-fila { display: flex; gap: 8px; margin-top: 10px; }
+.otro-fila input { flex: 1; min-width: 0; height: 42px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.05); padding: 0 16px; font-size: 16px; outline: none; }
+.otro-fila button { padding: 0 16px; border-radius: 999px; background: #fff; color: #000; font-weight: 600; font-size: 14.5px; }
+.chip.otro { border: 1px dashed rgba(255,255,255,.25); background: transparent; color: var(--text-2); }
+.partes { margin-top: 14px; }
+.partes .fila { padding: 10px 0; }
+.rev .tabs-frec button { padding: 7px 2px; font-size: 13px; }
+.rev .calc-aporte { padding: 9px 12px; font-size: 13.5px; }
+.acomodo .fila .der input { width: 104px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.05); padding: 0 10px; font-size: 16px; text-align: right; outline: none; }
+.acomodo .fila .txt small { white-space: normal; }
+.resumen-acomodo { position: sticky; bottom: 0; padding: 12px 0 4px; background: linear-gradient(transparent, #000 30%); }
+.resumen-acomodo .linea { display: flex; justify-content: space-between; font-size: 15px; color: var(--text-2); }
+.resumen-acomodo .linea b { color: var(--text); }
+.credito-info { display: flex; gap: 22px; margin-top: 10px; }
+.credito-info div { display: flex; flex-direction: column; gap: 2px; }
+.credito-info span { color: var(--text-2); font-size: 12.5px; }
+.credito-info b { font-size: 16px; font-weight: 600; }
 /* toast */
 .toast { position: fixed; left: 50%; top: calc(var(--safe-t) + 12px); transform: translate(-50%, -30px); opacity: 0; z-index: 200; padding: 12px 18px; border-radius: 16px; background: rgba(30,30,32,.92); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,.1); font-size: 14.5px; font-weight: 550; max-width: 90vw; transition: transform .3s cubic-bezier(.2,.9,.3,1.2), opacity .25s; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
 .toast.on { transform: translate(-50%, 0); opacity: 1; }
