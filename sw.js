@@ -1,8 +1,8 @@
 /* Control de Finanzas — trabajo sin internet */
-const VERSION = 'cdf-v1.0.0';
+const VERSION = 'cdf-v1.1.0';
 const ARCHIVOS = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest', 'google-sync.gs',
-  'js/util.js', 'js/store.js', 'js/calc.js', 'js/ui.js', 'js/screens.js', 'js/sheets.js', 'js/sheets2.js', 'js/sync.js', 'js/main.js',
+  'js/util.js', 'js/store.js', 'js/calc.js', 'js/ui.js', 'js/screens.js', 'js/sheets.js', 'js/sheets2.js', 'js/sync.js', 'js/cuestionario.js', 'js/main.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/icon-maskable-512.png'
 ];
 
