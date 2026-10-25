@@ -17,13 +17,18 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return; // Google Sheets va directo a la red
-  e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then((enCache) => {
-      const red = fetch(e.request).then((r) => {
-        if (r && r.ok) { const copia = r.clone(); caches.open(VERSION).then((c) => c.put(e.request, copia)); }
-        return r;
-      }).catch(() => enCache || caches.match('index.html'));
-      return enCache || red;
-    })
-  );
+  // Con internet: siempre lo más nuevo. Sin internet (o si tarda): lo guardado.
+  e.respondWith((async () => {
+    const cache = await caches.open(VERSION);
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 4000);
+      const r = await fetch(e.request, { signal: ctrl.signal, cache: 'no-cache' });
+      clearTimeout(t);
+      if (r && r.ok) cache.put(e.request, r.clone());
+      return r;
+    } catch (err) {
+      return (await caches.match(e.request, { ignoreSearch: true })) || (await caches.match('index.html')) || Response.error();
+    }
+  })());
 });
