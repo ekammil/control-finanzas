@@ -177,7 +177,8 @@
     },
     'pagar-rec': (el) => {
       const r = App.state.recurrentes.find((x) => x.id === el.dataset.id); if (!r) return;
-      App.abrirHoja('registro', { modo: 'gasto', monto: String(r.monto), espacio: r.espacio, sobre: r.sobre, cuenta: r.cuenta || App.ultimaCuenta('gasto'), nota: r.nombre, recId: r.id, recFecha: el.dataset.f });
+      // un cobro fijo a tarjeta de crédito (como una suscripción) se junta poco a poco hasta pagar la tarjeta
+      App.abrirHoja('registro', { modo: 'gasto', monto: String(r.monto), espacio: r.espacio, sobre: r.sobre, cuenta: r.cuenta || App.ultimaCuenta('gasto'), nota: r.nombre, recId: r.id, recFecha: el.dataset.f, diferido: App.esCredito(App.cuenta(r.cuenta)), fecha: el.dataset.f && el.dataset.f <= U.today() ? el.dataset.f : U.today() });
     },
 
     /* bloqueo */
