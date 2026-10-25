@@ -257,7 +257,7 @@
       fila('hoja', I.cloud, 'Respaldo en Google Sheets', a.syncUrl ? '<span class="ok-check"></span>Conectado' + (a.ultimaSync ? ' · ' + U.hora(a.ultimaSync) : '') : 'Opcional', 'data-h="sync"') + '</div>';
     h += '<div class="seccion"><div class="seccion-titulo"><h2>App</h2></div>' +
       fila('hoja', I.phone, 'Instalar en tu teléfono', 'iPhone y Android', 'data-h="instalar"') +
-      fila('hoja', I.apple, 'Atajo de Apple Pay', 'Solo iPhone', 'data-h="atajo"') + '</div>';
+      fila('hoja', I.apple, 'Atajos del iPhone', 'Gasto rápido y Apple Pay', 'data-h="atajo"') + '</div>';
     h += '<div class="seccion"><button class="btn peligro" data-a="hoja" data-h="borrar">Borrar todos mis datos</button>' +
       '<p class="nota" style="text-align:center">Control de Finanzas · v1.2 · Tus datos viven en este teléfono.</p></div>';
     h += '</div>';

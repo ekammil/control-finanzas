@@ -3,6 +3,32 @@
   const App = window.App;
   let corriendo = false;
   let timer = null;
+  let corriendoOtraVez = false;
+  const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+
+  /* Registra un gasto o ingreso que llegó de un atajo con sobre y cuenta. Devuelve un texto corto o null si hay que revisarlo a mano. */
+  App.registrarAtajo = (it) => {
+    const S = App.state;
+    const monto = U.r2(Math.abs(parseFloat(String(it.monto).replace(/[^0-9.]/g, '')) || 0));
+    const tipo = norm(it.tipo) === 'ingreso' ? 'ingreso' : 'gasto';
+    if (!(monto > 0) || (!it.sobre && tipo === 'gasto')) return null;
+    let esp = App.espacioPrincipal(), sobre = null;
+    if (tipo === 'gasto' && norm(it.sobre) !== 'sin sobre') {
+      for (const e of S.espacios) { const s = e.sobres.find((x) => norm(x.nombre) === norm(it.sobre)); if (s) { esp = e; sobre = s; break; } }
+      if (!sobre) return null;
+    }
+    if (tipo === 'ingreso' && it.sobre) { const e = S.espacios.find((x) => norm(x.nombre) === norm(it.sobre)); if (e) esp = e; }
+    // cuenta: "Efectivo (monedas)" usa las monedas del efectivo
+    const txt = norm(it.cuenta);
+    const sub = /moneda/.test(txt) ? 'm' : 'b';
+    const base = txt.replace(/\(.*\)/, '').trim();
+    let cta = S.cuentas.find((c) => norm(c.nombre) === base) || S.cuentas.find((c) => base && (norm(c.nombre).includes(base) || base.includes(norm(c.nombre))));
+    if (!cta && /moneda/.test(txt)) cta = S.cuentas.find((c) => c.partes);
+    if (!cta) return null;
+    const fecha = /^\d{4}-\d{2}-\d{2}$/.test(String(it.fecha)) ? String(it.fecha) : U.today();
+    App.addMov({ id: String(it.id), tipo, monto, espacio: esp.id, sobre: sobre ? sobre.id : '', cuenta: cta.id, sub: cta.partes ? sub : '', nota: String(it.nota || it.comercio || '').trim(), fecha, origen: 'atajo' }, { reparto: tipo === 'ingreso', noSave: true });
+    return (tipo === 'ingreso' ? '+' : '') + U.money0(monto) + ' ' + (sobre ? sobre.nombre : tipo === 'ingreso' ? 'ingreso' : 'sin sobre');
+  };
 
   const nombreDe = (m) => {
     const e = App.espacio(m.espacio), e2 = App.espacio(m.espacio2);
@@ -49,18 +75,24 @@
         const r2 = await fetch(url + (url.includes('?') ? '&' : '?') + 'accion=bandeja');
         const j2 = await r2.json();
         let nuevos = 0;
+        const registrados = [];
         if (j2.ok && Array.isArray(j2.items)) {
           const ya = new Set(S.movs.map((m) => m.id).concat(S.bandeja.map((b) => b.id), S.bandejaOk || []));
           j2.items.forEach((it) => {
-            if (!it.id || ya.has(it.id)) return;
-            S.bandeja.push({ id: String(it.id), monto: U.r2(it.monto), comercio: it.comercio || '', tarjeta: it.tarjeta || '', fecha: it.fecha || U.today() });
+            if (!it.id || ya.has(String(it.id))) return;
+            // del atajo "Gasto rápido": ya trae sobre y cuenta, se registra solo
+            const r = App.registrarAtajo(it);
+            if (r) { registrados.push(r); S.bandejaOk = (S.bandejaOk || []).concat([String(it.id)]); return; }
+            S.bandeja.push({ id: String(it.id), monto: U.r2(parseFloat(String(it.monto).replace(/[^0-9.]/g, '')) || 0), comercio: it.comercio || it.nota || (it.sobre ? 'Sobre ' + it.sobre : ''), tarjeta: it.tarjeta || it.cuenta || '', fecha: it.fecha || U.today() });
             nuevos++;
           });
         }
         S.ajustes.ultimaSync = Date.now();
         localStorage.setItem('control-finanzas-v1', JSON.stringify(S));
-        if (nuevos && !App.h) App.render();
-        if (avisar) App.toast('Sincronizado' + (nuevos ? ' · ' + nuevos + ' pago(s) nuevos de Apple Pay' : ''), 'ok');
+        if ((nuevos || registrados.length) && !App.h) App.render();
+        if (registrados.length) App.toast('Desde tus atajos: ' + registrados.join(', '), 'largo');
+        else if (avisar) App.toast('Sincronizado' + (nuevos ? ' · ' + nuevos + ' pago(s) nuevos de Apple Pay' : ''), 'ok');
+        if (registrados.length && !corriendoOtraVez) { corriendoOtraVez = true; setTimeout(() => { corriendoOtraVez = false; App.sync.run(false); }, 300); }
         return true;
       } catch (e) {
         if (avisar) App.toast('No se pudo sincronizar: ' + (e.message || 'revisa el enlace'), 'error');

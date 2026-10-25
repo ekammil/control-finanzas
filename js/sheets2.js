@@ -449,21 +449,22 @@
       (App.instalable ? '<button class="btn" data-a="instalar-ya">' + I.download + ' Instalar ahora</button>' : '')
   };
 
-  /* ---------- Atajo de Apple Pay ---------- */
+  /* ---------- Atajos (gasto rápido y Apple Pay) ---------- */
   H.atajo = {
-    titulo: 'Atajo de Apple Pay',
+    titulo: 'Atajos del iPhone',
     render: () => {
       const url = App.state.ajustes.syncUrl;
-      if (!url) return '<p class="nota" style="margin-top:0">Para que tus pagos con Apple Pay lleguen solos a la app, primero conecta el <b>Respaldo en Google Sheets</b>.</p><button class="btn" data-a="hoja" data-h="sync" data-apilar="1">Conectar Google Sheets</button>';
-      return '<p class="nota" style="margin-top:0">Cada vez que pagues con Apple Pay, el iPhone manda el monto y el comercio a tu hoja. Al abrir la app con internet, el pago aparece en <b>Para ti</b> y solo eliges el sobre.</p>' +
-        '<ol class="pasos"><li>Abre <b>Atajos</b> → pestaña <b>Automatización</b> → <b>+</b> → <b>Transacción</b>.</li>' +
-        '<li>Elige tus tarjetas, deja "Cualquier categoría" y "Cualquier comercio", y marca <b>Ejecutar inmediatamente</b>.</li>' +
-        '<li>Toca <b>Nueva automatización en blanco</b> y agrega <b>Obtener contenido de URL</b>.</li>' +
-        '<li>En URL pega tu enlace (abajo). Toca la flecha ›: Método <b>POST</b>, Cuerpo de solicitud <b>JSON</b>.</li>' +
-        '<li>Agrega 4 campos de texto: <b>accion</b> = bandeja · <b>monto</b> = Transacción → Cantidad · <b>comercio</b> = Transacción → Comercio · <b>tarjeta</b> = Transacción → Tarjeta o pase.</li>' +
-        '<li>Listo. Sin preguntas al pagar: nunca se pierde un pago.</li></ol>' +
-        '<code class="url">' + U.esc(url) + '</code><button class="btn sec" data-a="copiar" data-v="' + U.esc(url) + '">Copiar enlace</button>' +
-        '<p class="nota">Si pagas sin señal, el iPhone no puede mandarlo. Para eso, revisa tu Cuadre de la noche.</p>';
+      if (!url) return '<p class="nota" style="margin-top:0">Para usar atajos (gasto rápido desde el Centro de control y Apple Pay automático), primero conecta el <b>Respaldo en Google Sheets</b>.</p><button class="btn" data-a="hoja" data-h="sync" data-apilar="1">Conectar Google Sheets</button>';
+      const sobres = [];
+      App.state.espacios.forEach((e) => e.sobres.forEach((x) => { if (x.tipo !== 'porIngreso' && x.tipo !== 'tarjeta') sobres.push(x.nombre); }));
+      sobres.push('Sin sobre');
+      const cuentas = [];
+      App.state.cuentas.forEach((c) => { if (c.partes) { cuentas.push(c.nombre + ' (billetes)'); cuentas.push(c.nombre + ' (monedas)'); } else cuentas.push(c.nombre); });
+      return '<p class="nota" style="margin-top:0">Los atajos guardan cada gasto en tu iPhone (aunque no tengas señal) y lo mandan a tu hoja cuando hay internet. Al abrir la app, los gastos con sobre se registran solos y los de Apple Pay te aparecen en <b>Para ti</b>.</p>' +
+        '<div class="etq">Tu enlace</div><code class="url">' + U.esc(url) + '</code><button class="btn sec" data-a="copiar" data-v="' + U.esc(url) + '">Copiar enlace</button>' +
+        '<div class="etq">Sobres para el atajo (escríbelos igual)</div><code class="url">' + U.esc(sobres.join('\n')).replace(/\n/g, '<br>') + '</code><button class="btn sec" data-a="copiar" data-v="' + U.esc(sobres.join('\n')) + '">Copiar sobres</button>' +
+        '<div class="etq">Cuentas para el atajo</div><code class="url">' + U.esc(cuentas.join('\n')).replace(/\n/g, '<br>') + '</code><button class="btn sec" data-a="copiar" data-v="' + U.esc(cuentas.join('\n')) + '">Copiar cuentas</button>' +
+        '<p class="nota">No compartas tu enlace: quien lo tenga puede escribir en tu hoja.</p>';
     }
   };
 
