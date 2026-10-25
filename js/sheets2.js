@@ -163,7 +163,7 @@
     titulo: 'Cuentas',
     render: () => {
       const c = App.calc();
-      let y = '<p class="nota" style="margin-top:0">Las <b>cuentas</b> son dónde está tu dinero: banco, efectivo, monedas, Revolut…</p>';
+      let y = '<p class="nota" style="margin-top:0">Las <b>cuentas</b> son dónde está tu dinero: banco, efectivo, monedas, apps…</p>';
       App.state.cuentas.forEach((ct) => {
         y += '<button class="fila" data-a="hoja" data-h="cuenta-editar" data-id="' + ct.id + '" data-apilar="1"><div class="ico">' + U.esc(ct.icono) + '</div><div class="txt"><b>' + U.esc(ct.nombre) + '</b></div><div class="der"><b class="num">' + U.money(c.cuentas[ct.id]) + '</b></div>' + I.chev + '</button>';
       });
@@ -176,7 +176,7 @@
     titulo: (h) => h.id ? 'Editar cuenta' : 'Nueva cuenta',
     init: (d) => { const c = d.id ? App.cuenta(d.id) : null; return { id: d.id || '', nombre: c ? c.nombre : '', icono: c ? c.icono : '🏦', saldo: '', esp: (App.espacioPrincipal() || {}).id }; },
     render: (h) => {
-      let y = '<label class="campo"><span>Nombre</span><input data-m="nombre" value="' + U.esc(h.nombre) + '" placeholder="Ej. BBVA, Efectivo, Revolut" maxlength="30"></label>';
+      let y = '<label class="campo"><span>Nombre</span><input data-m="nombre" value="' + U.esc(h.nombre) + '" placeholder="Ej. Banco, Efectivo, Tarjeta" maxlength="30"></label>';
       if (!h.id) {
         y += '<label class="campo"><span>¿Cuánto tienes hoy ahí?</span><input inputmode="decimal" data-m="saldo" value="' + U.esc(h.saldo) + '" placeholder="$0"></label>';
         if (App.state.espacios.length > 1) y += '<div class="etq">Ese dinero es de</div><div class="chips">' + App.state.espacios.map((e) => chip(h.esp === e.id, 'cuenta-esp', 'data-v="' + e.id + '"', U.esc(e.icono) + ' ' + U.esc(e.nombre))).join('') + '</div>';
