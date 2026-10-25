@@ -4,7 +4,7 @@
 
   App.PERFILES = {
     estudiante: { nombre: 'Estudiante', icono: '🎓', desc: 'Escuela, transporte, comida y tus gustos.' },
-    diario: { nombre: 'Trabajador', icono: '💼', desc: 'Trabajas para alguien y quieres ordenar tus gastos y ahorrar.' },
+    diario: { nombre: 'Con empleo', icono: '💼', desc: 'Tienes un empleo y quieres llevar el control de tu dinero.' },
     negocio: { nombre: 'Con negocio', icono: '🏪', desc: 'Tu dinero personal separado del de tu negocio.' },
     cero: { nombre: 'Desde cero', icono: '✏️', desc: 'Sin preguntas. Tú armas tus sobres después.' }
   };
