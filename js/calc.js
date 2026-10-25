@@ -173,8 +173,11 @@
     for (; i < movs.length && movs[i].fecha < desde; i++) E.aplicar(movs[i]);
     const puntos = [{ x: 0, v: resumir(E).disponible, label: 'inicio' }];
     if (rango === 'hoy') {
+      const minuto = (m) => (m && m.fecha === hoy ? Math.floor(m.creado / 60000) : -1);
       for (; i < movs.length; i++) {
         E.aplicar(movs[i]);
+        // un solo punto por minuto: un ingreso y su reparto no dibujan picos
+        if (i + 1 < movs.length && minuto(movs[i + 1]) === minuto(movs[i])) continue;
         const d = new Date(movs[i].creado);
         const frac = movs[i].fecha === hoy ? (d.getHours() * 60 + d.getMinutes()) / 1440 : 0;
         puntos.push({ x: frac, v: resumir(E).disponible });
