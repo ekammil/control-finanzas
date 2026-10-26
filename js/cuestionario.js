@@ -59,7 +59,7 @@
     { id: 'ocio', titulo: '¿Quieres un sobre para tus gustos y salidas?', ayuda: 'Es dinero que puedes gastar en lo que quieras.', def: 'si', opciones: siNo([sb('ocio', 'Ocio', '🎉', 'gasto', 200, 45, { disponible: true })]) },
     { id: 'ahorro', titulo: '¿Para qué quieres ahorrar?', multi: true, def: ['emergencias'], otro: { icono: '🎯', tipo: 'ahorro', ph: 'Ej. Viaje, Celular' }, opciones: [
       { v: 'emergencias', t: '🛟 Emergencias', sobres: [sb('colchon', 'Colchón', '🛟', 'ahorro', 100, 60)] },
-      { v: 'meta', t: '🎯 Una meta (auto, viaje, celular…)', sobres: [sb('meta', 'Mi meta', '🎯', 'ahorro', 150, 61, { meta: 5000 })] },
+      { v: 'meta', t: '🎯 Una meta (auto, viaje, celular…)', sobres: [sb('meta', 'Mi meta', '🎯', 'ahorro', 0, 61)] },
       { v: 'imprevistos', t: '🧾 Gastos inesperados', sobres: [sb('imprevistos', 'Imprevistos', '🧾', 'gasto', 50, 44)] },
       { v: 'nada', t: 'Por ahora no', sobres: [], excluye: true }
     ] },
@@ -174,8 +174,8 @@
       const esp = b.esp === 'n' && negocio ? negocio : personal;
       const esGasto = b.tipo === 'gasto' || b.tipo === 'limite';
       esp.sobres.push(App.nuevoSobre({
-        nombre: b.nombre.trim(), icono: b.icono, tipo: b.tipo, cuota: b.tipo === 'deuda' ? 0 : num(b.cuota),
-        meta: num(b.meta), desde: b.tipo === 'deuda' ? U.today() : '', hasta: b.tipo === 'deuda' ? (b.hasta || '') : '',
+        nombre: b.nombre.trim(), icono: b.icono, tipo: b.tipo, cuota: b.tipo === 'deuda' ? 0 : esMeta(b) ? ((App.calcMeta(num(b.meta), 0, b.hasta, b.frecAporte) || {}).cuota || 0) : num(b.cuota),
+        meta: num(b.meta), desde: b.tipo === 'deuda' ? U.today() : '', hasta: b.tipo === 'deuda' || esMeta(b) ? (b.hasta || '') : '',
         disponible: !!b.disponible, frecPago: U.frec(b.frecPago), frecAporte: U.frec(b.frecAporte), fechaPago: esGasto ? (b.fechaPago || '') : ''
       }));
     });
@@ -210,10 +210,18 @@
   };
   const botones = (sig, txt) => '<div class="espaciador"></div><button class="btn" data-a="' + (sig || 'ob-sig') + '">' + (txt || 'Continuar') + '</button><button class="btn sec" data-a="ob-atras">Atrás</button>';
 
+  // una meta (la sugerida o una que escribió en "Otro"): pide cuánto y para cuándo
+  const esMeta = (b) => b.tipo === 'ahorro' && (b.key === 'meta' || !!b.custom);
+
   /* texto del aporte de un sobre del borrador */
   const calcBorrador = (b) => {
     const fA = U.frec(b.frecAporte);
     if (b.tipo === 'porIngreso') return '';
+    if (esMeta(b)) {
+      if (!(num(b.meta) > 0) || !b.hasta) return 'Pon cuánto quieres juntar y para cuándo, y aquí te digo cuánto guardar.';
+      if (b.hasta <= U.today()) return 'Elige una fecha después de hoy.';
+      return App.textoMeta(App.calcMeta(num(b.meta), 0, b.hasta, fA), fA, 0, 0, b.hasta);
+    }
     if (b.tipo === 'deuda') {
       if (!(num(b.meta) > 0 && b.hasta)) return 'Pon cuánto debes y para cuándo.';
       const n = Math.max(1, U.contarPeriodos(fA, U.today(), b.hasta));
@@ -276,6 +284,10 @@
               '<label class="campo"><span>¿Para cuándo?</span><input type="date" data-ob="' + i + '|hasta" data-obr="1" value="' + U.esc(b.hasta) + '"></label></div>';
           } else if (b.tipo === 'porIngreso') {
             h += '<div class="dos"><label class="campo"><span>Por cada ingreso</span><input inputmode="decimal" data-ob="' + i + '|cuota" value="' + U.esc(b.cuota) + '"></label><div></div></div>';
+          } else if (esMeta(b)) {
+            h += '<div class="dos"><label class="campo"><span>¿Cuánto quieres juntar?</span><input inputmode="decimal" data-ob="' + i + '|meta" value="' + U.esc(b.meta) + '" placeholder="Ej. 5000"></label>' +
+              '<label class="campo"><span>¿Para cuándo?</span><input type="date" data-ob="' + i + '|hasta" min="' + U.addDays(U.today(), 1) + '" value="' + U.esc(b.hasta) + '"></label></div>';
+            h += '<div class="chips" style="margin-top:10px">' + [[1, 'En 1 mes'], [3, '3 meses'], [6, '6 meses'], [12, '1 año']].map(([m, t]) => '<button class="chip ' + (b.hasta === U.addMonths(U.today(), m) ? 'on' : '') + '" data-a="ob-plazo" data-i="' + i + '" data-v="' + m + '">' + t + '</button>').join('') + '</div>';
           } else if (b.tipo === 'ahorro') {
             h += '<div class="dos"><label class="campo"><span>¿Cuánto guardar?</span><input inputmode="decimal" data-ob="' + i + '|cuota" value="' + U.esc(b.cuota) + '" placeholder="$0"></label>' +
               (b.key === 'meta' || b.custom ? '<label class="campo"><span>¿Cuánto quieres juntar?</span><input inputmode="decimal" data-ob="' + i + '|meta" value="' + U.esc(b.meta) + '" placeholder="Opcional"></label>' : '<div></div>') + '</div>';
@@ -444,6 +456,10 @@
       if (!['quincenal', 'mensual', 'semestral', 'anual'].includes(b.frecPago)) b.fechaPago = '';
       quedarse();
     },
+    'ob-plazo': (el) => {
+      const b = App.ui.ob.borrador[Number(el.dataset.i)]; if (!b) return;
+      b.hasta = U.addMonths(U.today(), Number(el.dataset.v)); quedarse();
+    },
     'ob-frec-aporte': (el) => {
       const b = App.ui.ob.borrador[Number(el.dataset.i)]; if (!b) return;
       if (b.tipo === 'ahorro' && num(b.cuota) > 0) b.cuota = String(redondo(U.convertir(num(b.cuota), b.frecAporte, el.dataset.v)));
@@ -452,6 +468,8 @@
     'ob-crear': () => {
       const ob = App.ui.ob;
       if (ob.otro && String(ob.otroTxt || '').trim()) agregarOtro();
+      const falta = (ob.borrador || []).find((b) => b.incluir && esMeta(b) && !(num(b.meta) > 0 && b.hasta && b.hasta > U.today()));
+      if (falta) return App.toast((String(falta.nombre || '').trim() || 'Tu meta') + ': pon cuánto quieres juntar y para cuándo', 'error');
       App.crearDesdeCuestionario(ob); ob.saldos = {}; ob.tc = {}; ir(1);
     },
     'ob-saldos': () => {

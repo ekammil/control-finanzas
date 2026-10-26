@@ -211,7 +211,10 @@
         const ritmo = s.tipo === 'porIngreso' ? 0 : Number(x.cuota) || 0;
         const ritmoSem = U.convertir(ritmo, x.frecAporte, 'semanal');
         if (resta <= 0) pie1 = '¡Meta lograda! 🎉';
-        else if (s.hasta) pie1 = 'Faltan ' + U.money0(resta) + ' · para el ' + U.fechaCorta(s.hasta);
+        else if (s.hasta && s.hasta >= U.today()) {
+          const m = App.calcMeta(objetivo, actual, s.hasta, x.frecAporte);
+          pie1 = 'Faltan ' + U.money0(resta) + ' · ' + (U.frec(x.frecAporte) !== 'diario' && m ? '≈ ' + U.money(m.diario) + '/día · ' : '') + 'para el ' + U.fechaCorta(s.hasta);
+        } else if (s.hasta) pie1 = 'Faltan ' + U.money0(resta) + ' · la fecha ya pasó';
         else if (ritmoSem > 0) {
           const sem = Math.ceil(resta / ritmoSem);
           pie1 = 'Faltan ' + U.money0(resta) + ' · ~' + (sem > 104 ? Math.round(sem / 52) + ' años' : sem > 8 ? Math.round(sem / 4.33) + ' meses' : sem + ' semanas');

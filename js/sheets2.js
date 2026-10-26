@@ -28,7 +28,11 @@
       return 'Gastado ' + U.money0(st.gastadoCiclo) + ' de ' + U.money0(st.M) + ' ' + U.FREC_ESTE[U.frec(s.frecPago)] + (st.falta > 0 ? ' · faltan ' + U.money0(st.falta) : '');
     }
     if (s.tipo === 'deuda') return 'Aporte ' + U.money0(st.cuota) + U.FREC_POR[st.frecAporte] + (st.falta > 0 ? ' · faltan ' + U.money0(st.falta) : ' · cubierto ✓');
-    if (s.tipo === 'ahorro') return (s.meta > 0 ? 'Meta ' + U.money0(s.meta) + ' · ' : '') + U.money0(st.cuota) + U.FREC_POR[st.frecAporte] + faltaTxt(st);
+    if (s.tipo === 'ahorro') {
+      const m = s.meta > 0 && s.hasta ? App.calcMeta(s.meta, st.saldo, s.hasta, st.frecAporte) : null;
+      if (m) return m.resta <= 0 ? 'Meta ' + U.money0(s.meta) + ' lograda 🎉' : 'Faltan ' + U.money0(m.resta) + ' · ' + U.money(st.cuota) + U.FREC_POR[st.frecAporte] + (U.frec(st.frecAporte) !== 'diario' ? ' (≈ ' + U.money(m.diario) + '/día)' : '') + faltaTxt(st);
+      return (s.meta > 0 ? 'Meta ' + U.money0(s.meta) + ' · ' : '') + U.money0(st.cuota) + U.FREC_POR[st.frecAporte] + faltaTxt(st);
+    }
     if (s.tipo === 'tarjeta') return st.saldo < -0.004 ? 'Falta juntar ' + U.money0(-st.saldo) + (st.venc ? ' · pago ' + U.fechaCorta(st.venc) : '') + (st.falta > 0 ? ' · hoy ' + U.money0(st.falta) : '') : 'Al corriente ✓';
     return U.money0(s.cuota) + ' por cada ingreso' + (s.meta > 0 ? ' · meta ' + U.money0(s.meta) : '');
   };
@@ -48,7 +52,7 @@
   /* Sobre armado con lo que hay en la hoja de edición (para calcular el aporte en vivo) */
   const sobreDeHoja = (h) => ({
     id: h.id || 'nuevo', nombre: h.nombre, tipo: h.tipo, cuota: num(h.cuota), meta: num(h.meta),
-    desde: h.tipo === 'deuda' ? (h.desde || U.today()) : '', hasta: h.tipo === 'deuda' || h.tipo === 'ahorro' ? (h.hasta || '') : '',
+    desde: h.tipo === 'deuda' ? (h.desde || U.today()) : '', hasta: h.tipo === 'deuda' || (h.tipo === 'ahorro' && h.conMeta) ? (h.hasta || '') : '',
     frecPago: U.frec(h.frecPago), frecAporte: h.frecAporte, fechaPago: h.tipo === 'gasto' || h.tipo === 'limite' ? (h.fechaPago || '') : '',
     aporteManual: h.manual ? num(h.aporteManual) : '', creado: h.creado || U.today(), cuenta: h.cuenta
   });
@@ -74,7 +78,13 @@
       return 'Se apartan <b>' + U.money(p.cuota) + '</b> ' + cada + (p.n ? '<small>' + p.n + ' aportes hasta el ' + U.fechaCorta(s.hasta) + '.</small>' : '.');
     }
     if (s.tipo === 'ahorro') {
-      if (s.meta > 0 && s.hasta) return 'Se apartan <b>' + U.money(p.cuota) + '</b> ' + cada + ' para juntar ' + U.money0(s.meta) + ' el ' + U.fechaCorta(s.hasta) + '.';
+      if (h.conMeta) {
+        if (!(s.meta > 0) || !s.hasta) return 'Escribe cuánto quieres juntar y para cuándo, y aquí te digo cuánto guardar.';
+        if (s.hasta <= U.today()) return 'Elige una fecha después de hoy.';
+        const lleva = h.id && c.sob[h.id] ? Math.max(0, c.sob[h.id].saldo) : 0;
+        const m = App.calcMeta(s.meta, lleva, s.hasta, p.frecAporte);
+        return App.textoMeta(m, p.frecAporte, p.cuota, lleva, s.hasta);
+      }
       return 'Se apartan <b>' + U.money(num(h.cuota)) + '</b> ' + cada + '.';
     }
     if (s.tipo === 'tarjeta') return p.cuota > 0 ? 'Esta vez: <b>' + U.money(p.cuota) + '</b> ' + cada + (p.venc ? ' para el pago del ' + U.fechaCorta(p.venc) : '') + '.' : 'No hay compras pendientes de juntar.';
@@ -213,7 +223,7 @@
 
   /* ---------- Editar sobre ---------- */
   H['sobre-editar'] = {
-    titulo: (h) => h.id ? 'Editar sobre' : 'Nuevo sobre',
+    titulo: (h) => h.id ? (h.conMeta ? 'Editar meta' : 'Editar sobre') : (h.conMeta ? 'Nueva meta' : 'Nuevo sobre'),
     init: (d) => {
       const s = d.id ? App.sobre(d.esp, d.id) : null;
       const b = s ? JSON.parse(JSON.stringify(s)) : App.nuevoSobre({ icono: '⭐', tipo: d.tipoInicial || 'gasto', cuota: '', meta: '' });
@@ -222,6 +232,9 @@
       if (b.tipo !== 'tarjeta' && !b.frecAporte) b.frecAporte = App.state.ajustes.frecIngreso;
       if (b.tipo === 'deuda' && !b.desde) b.desde = U.today();
       if (b.cuota === 0 && !s) b.cuota = '';
+      // ahorro con meta y fecha: lo pide al crear una meta desde Metas
+      b.conMeta = s ? (s.tipo === 'ahorro' && s.meta > 0 && !!s.hasta) : d.conMeta === '1';
+      if (b.conMeta && !s) { b.meta = ''; b.hasta = ''; b.icono = '🎯'; }
       return Object.assign(b, { esp: d.esp || (App.espacioPrincipal() || {}).id, id: d.id || '' });
     },
     alEscribir: (h) => { const el = document.getElementById('prev-aporte'); if (el) el.innerHTML = vistaAporte(h); },
@@ -245,13 +258,22 @@
           (h.fechaPago ? '<label class="campo"><span>Avisarme</span><select data-m="avisar">' + [0, 1, 2, 3, 5, 7].map((n) => '<option value="' + n + '" ' + (String(h.avisar) === String(n) ? 'selected' : '') + '>' + (n === 0 ? 'El mismo día' : n + (n === 1 ? ' día antes' : ' días antes')) + '</option>').join('') + '</select></label>' : '<div></div>') + '</div>';
         y += '<p class="nota">' + (h.fechaPago ? 'Se repite ' + U.FREC_CADA[U.frec(h.frecPago)] + ' desde esa fecha. Te aviso antes y se aparta poco a poco para que llegues completo.' : 'Sin fecha: es lo que planeas gastar ' + U.FREC_CADA[U.frec(h.frecPago)] + '. Ponle fecha si es un pago (renta, colegiatura, gym).') + '</p>';
       } else if (h.tipo === 'ahorro') {
-        y += '<div class="etq">¿Cuánto guardar y cada cuánto?</div>';
-        y += '<label class="campo" style="margin-top:0"><span>Cantidad</span><input inputmode="decimal" data-m="cuota" value="' + U.esc(h.cuota) + '" placeholder="$0"' + (num(h.meta) > 0 && h.hasta ? ' disabled' : '') + '></label>';
-        y += App.tabsFrec('se-frec-aporte', fA);
-        y += '<div class="dos"><label class="campo"><span>Meta (opcional)</span><input inputmode="decimal" data-m="meta" value="' + U.esc(h.meta || '') + '" placeholder="Ej. 10000"></label>' +
-          '<label class="campo"><span>¿Para cuándo? (opcional)</span><input type="date" data-m="hasta" data-render="1" value="' + U.esc(h.hasta || '') + '"></label></div>';
-        y += '<div class="calc-aporte" id="prev-aporte">' + vistaAporte(h) + '</div>';
-        y += '<p class="nota">Con meta y fecha, la cantidad se calcula sola. La meta aparece en Metas con su barra.</p>';
+        y += '<div class="seg" style="margin-top:14px">' + [['1', '🎯 Meta con fecha'], ['0', '💵 Cantidad fija']].map(([v, t]) => '<button class="' + ((h.conMeta ? '1' : '0') === v ? 'on' : '') + '" data-a="se-conmeta" data-v="' + v + '">' + t + '</button>').join('') + '</div>';
+        if (h.conMeta) {
+          const hoy = U.today();
+          y += '<div class="dos"><label class="campo"><span>¿Cuánto quieres juntar?</span><input inputmode="decimal" data-m="meta" value="' + U.esc(h.meta || '') + '" placeholder="Ej. 5000"></label>' +
+            '<label class="campo"><span>¿Para cuándo?</span><input type="date" data-m="hasta" data-render="1" min="' + U.addDays(hoy, 1) + '" value="' + U.esc(h.hasta || '') + '"></label></div>';
+          y += '<div class="chips" style="margin-top:10px">' + [[1, 'En 1 mes'], [3, '3 meses'], [6, '6 meses'], [12, '1 año']].map(([m, t]) => chip(h.hasta === U.addMonths(hoy, m), 'se-plazo', 'data-v="' + m + '"', t)).join('') + '</div>';
+          y += '<div class="sub-etq">Cada cuánto apartas</div>' + App.tabsFrec('se-frec-aporte', fA);
+          y += '<div class="calc-aporte" id="prev-aporte">' + vistaAporte(h) + '</div>';
+          y += '<p class="nota">Se calcula solo y se ajusta cada día: si un día guardas más o menos, se reparte lo que falte entre los días que quedan. La meta aparece en Metas con su barra.</p>';
+        } else {
+          y += '<div class="etq">¿Cuánto guardar y cada cuánto?</div>';
+          y += '<label class="campo" style="margin-top:0"><span>Cantidad</span><input inputmode="decimal" data-m="cuota" value="' + U.esc(h.cuota) + '" placeholder="$0"></label>';
+          y += App.tabsFrec('se-frec-aporte', fA);
+          y += '<label class="campo"><span>Meta (opcional)</span><input inputmode="decimal" data-m="meta" value="' + U.esc(h.meta || '') + '" placeholder="Ej. 10000"><small>Siempre guardas lo mismo. Si quieres que te calcule cuánto guardar para una fecha, elige "Meta con fecha".</small></label>';
+          y += '<div class="calc-aporte" id="prev-aporte">' + vistaAporte(h) + '</div>';
+        }
       } else if (h.tipo === 'deuda') {
         y += '<label class="campo"><span>Total a juntar</span><input inputmode="decimal" data-m="meta" value="' + U.esc(h.meta || '') + '" placeholder="$0"></label>';
         y += '<div class="dos"><label class="campo"><span>Desde</span><input type="date" data-m="desde" data-render="1" value="' + U.esc(h.desde || U.today()) + '"></label><label class="campo"><span>Fecha límite</span><input type="date" data-m="hasta" data-render="1" value="' + U.esc(h.hasta || '') + '"></label></div>';
@@ -377,10 +399,10 @@
     titulo: 'Nueva meta',
     render: () => {
       let y = '<p class="nota" style="margin-top:0">Una meta es un sobre de ahorro con un objetivo. ¿Qué tipo quieres?</p>';
-      [['ahorro', '🎯', 'Ahorrar para algo', 'Ej. auto, viaje, celular. Guardas una cantidad cada cierto tiempo.'],
-        ['deuda', '📅', 'Juntar para una fecha', 'Ej. una deuda o colegiatura. El aporte se calcula solo.'],
+      [['ahorro', '🎯', 'Ahorrar para algo', 'Ej. viaje, celular, auto. Pones cuánto y para cuándo, y te digo cuánto guardar.'],
+        ['deuda', '📅', 'Pagar algo en una fecha', 'Ej. una deuda o colegiatura. El aporte se calcula solo.'],
         ['porIngreso', '📈', 'Por cada ingreso', 'Ej. reinvertir en tu negocio cada vez que cobras.']].forEach(([t, ic, ti, de]) => {
-        y += '<button class="fila" data-a="hoja" data-h="sobre-editar" data-tipoinicial="' + t + '" data-apilar="1"><div class="ico">' + ic + '</div><div class="txt"><b>' + ti + '</b><small style="white-space:normal">' + de + '</small></div>' + I.chev + '</button>';
+        y += '<button class="fila" data-a="hoja" data-h="sobre-editar" data-tipoinicial="' + t + '"' + (t === 'ahorro' ? ' data-meta="1"' : '') + ' data-apilar="1"><div class="ico">' + ic + '</div><div class="txt"><b>' + ti + '</b><small style="white-space:normal">' + de + '</small></div>' + I.chev + '</button>';
       });
       return y;
     }

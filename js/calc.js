@@ -535,6 +535,31 @@
     lista.sort((a, b) => (a.urge === b.urge ? 0 : a.urge ? -1 : 1) || (a.urge ? a.venc.localeCompare(b.venc) : 0) || a.i - b.i);
     return lista;
   };
+  /* ---------------- Metas con fecha ----------------
+     Cuánto guardar para juntar "meta" el día "hasta": se reparte lo que falta entre los días
+     (y los aportes) que quedan. Como se calcula con lo que llevas, cada día se ajusta solo. */
+  App.calcMeta = (meta, llevas, hasta, frec, ref) => {
+    ref = ref || U.today();
+    meta = Number(meta) || 0;
+    if (!(meta > 0) || !hasta || hasta < ref) return null;
+    const resta = U.r2(Math.max(0, meta - Math.max(0, Number(llevas) || 0)));
+    const dias = U.daysBetween(ref, hasta) + 1;
+    const n = Math.max(1, U.contarPeriodos(frec, ref, hasta));
+    const arriba = (x) => Math.ceil(x * 100 - 1e-6) / 100;
+    return { resta, dias, n, cuota: arriba(resta / n), diario: arriba(resta / dias) };
+  };
+  App.fechaMeta = (f) => U.fechaLarga(f) + (U.parse(f).getFullYear() !== new Date().getFullYear() ? ' de ' + U.parse(f).getFullYear() : '');
+  App.textoMeta = (m, frec, cuota, lleva, hasta) => {
+    const f = U.frec(frec);
+    if (m.resta <= 0) return '¡Ya juntaste tu meta! 🎉';
+    const t = 'Guarda <b>' + U.money(cuota > 0 ? cuota : m.cuota) + '</b> ' + U.FREC_CADA[f] + '.';
+    const det = [];
+    if (f !== 'diario') det.push('Son ≈ ' + U.money(m.diario) + ' al día');
+    det.push((m.dias === 1 ? 'Queda 1 día' : 'Quedan ' + m.dias + ' días') + ', hasta el ' + App.fechaMeta(hasta));
+    if (lleva > 0) det.push('llevas ' + U.money(lleva) + ' y faltan ' + U.money(m.resta));
+    return t + '<small>' + det.join(' · ') + '.</small>';
+  };
+
   /* ---------------- Alertas de sobres y tarjetas ----------------
      alerta (por sobre o tarjeta): '' = usar la general · número = avisar con ese % restante ·
      'pasar' = solo cuando me pase · 'no' = nunca */

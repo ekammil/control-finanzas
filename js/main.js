@@ -84,7 +84,7 @@
       const d = el.dataset;
       const datos = limpio({
         id: d.id, esp: d.esp, modo: d.modo, espacio: d.esp, espacio2: d.esp, sobre: d.sobre, sobre2: d.sobre2,
-        cuenta: d.cuenta, moverModo: d.movermodo, tipoInicial: d.tipoinicial, credito: d.credito
+        cuenta: d.cuenta, moverModo: d.movermodo, tipoInicial: d.tipoinicial, credito: d.credito, conMeta: d.meta
       });
       if (d.h === 'registro' && datos.modo === 'mover') {
         datos.moverModo = datos.moverModo || 'espacios';
@@ -268,10 +268,16 @@
       if (h.tipo === 'deuda' && !h.desde) h.desde = U.today();
       App.renderHoja();
     },
+    'se-conmeta': (el) => {
+      const h = App.h; h.conMeta = el.dataset.v === '1';
+      if (!h.conMeta) h.hasta = '';
+      App.renderHoja();
+    },
+    'se-plazo': (el) => { App.h.hasta = U.addMonths(U.today(), Number(el.dataset.v)); App.renderHoja(); },
     'se-frec-pago': (el) => { App.h.frecPago = el.dataset.v; App.renderHoja(); },
     'se-frec-aporte': (el) => {
       const h = App.h; const antes = U.frec(h.frecAporte || App.state.ajustes.frecIngreso);
-      if (h.tipo === 'ahorro' && num(h.cuota) > 0) h.cuota = String(U.r2(U.convertir(num(h.cuota), antes, el.dataset.v)));
+      if (h.tipo === 'ahorro' && !h.conMeta && num(h.cuota) > 0) h.cuota = String(U.r2(U.convertir(num(h.cuota), antes, el.dataset.v)));
       if (h.manual && num(h.aporteManual) > 0) h.aporteManual = String(U.r2(U.convertir(num(h.aporteManual), antes, el.dataset.v)));
       h.frecAporte = el.dataset.v; App.renderHoja();
     },
@@ -284,7 +290,7 @@
       const esGasto = h.tipo === 'gasto' || h.tipo === 'limite';
       const datos = {
         nombre: h.nombre.trim(), icono: h.icono, tipo: h.tipo, cuota: num(h.cuota), meta: num(h.meta),
-        desde: h.tipo === 'deuda' ? (h.desde || U.today()) : '', hasta: h.tipo === 'deuda' || h.tipo === 'ahorro' ? (h.hasta || '') : '',
+        desde: h.tipo === 'deuda' ? (h.desde || U.today()) : '', hasta: h.tipo === 'deuda' || (h.tipo === 'ahorro' && h.conMeta) ? (h.hasta || '') : '',
         sobranteA: h.tipo === 'limite' ? (h.sobranteA || '') : '', disponible: h.tipo !== 'tarjeta' && !!h.disponible,
         frecPago: U.frec(h.frecPago), frecAporte: h.tipo === 'tarjeta' ? (h.frecAporte || '') : U.frec(h.frecAporte || App.state.ajustes.frecIngreso),
         fechaPago: esGasto ? (h.fechaPago || '') : '', avisar: Number(h.avisar) || 0,
@@ -292,7 +298,14 @@
         alerta: esGasto ? (h.alerta || '') : ''
       };
       if (h.tipo === 'deuda' && (!(datos.meta > 0) || !datos.hasta)) return App.toast('Pon el total y la fecha límite', 'error');
-      if (h.tipo === 'ahorro' && datos.hasta && !(datos.meta > 0)) return App.toast('Pon la meta para esa fecha', 'error');
+      if (h.tipo === 'ahorro' && h.conMeta) {
+        if (!(datos.meta > 0) || !datos.hasta) return App.toast('Pon cuánto quieres juntar y para cuándo', 'error');
+        if (datos.hasta <= U.today()) return App.toast('Elige una fecha después de hoy', 'error');
+        // se guarda también la cantidad calculada (por si la fecha pasa sin completar)
+        const lleva = h.id ? Math.max(0, (App.calc().sob[h.id] || {}).saldo || 0) : 0;
+        const m = App.calcMeta(datos.meta, lleva, datos.hasta, datos.frecAporte);
+        datos.cuota = m ? m.cuota : datos.cuota;
+      }
       if (esGasto && !(datos.cuota > 0) && !(datos.aporteManual > 0)) return App.toast('Escribe el monto', 'error');
       let s = h.id ? e.sobres.find((x) => x.id === h.id) : null;
       if (s) Object.assign(s, datos);
