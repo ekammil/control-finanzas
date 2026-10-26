@@ -7,6 +7,7 @@
   App.render = () => {
     const S = App.state;
     document.body.dataset.fondo = S.ajustes.fondo || 'aurora';
+    if (S.ajustes.fondo === 'planetas') App.cosmos();
     if (App.ui.bloqueado) { document.body.dataset.pantalla = 'ajustes'; $app().innerHTML = App.pantallaBloqueo(); return; }
     if (S.ajustes.onboarding || !S.cuentas.length) { document.body.dataset.pantalla = 'inicio'; $app().innerHTML = App.pantallaBienvenida(); return; }
     const p = App.ui.pantalla;
@@ -151,6 +152,7 @@
     /* avisos */
     'repartir': (el) => {
       const r = App.repartir(el.dataset.id, U.today(), false); App.save(); U.haptic();
+      if (r && r.partes.length) U.sonido('logro');
       App.toast(r && r.partes.length ? 'Repartido: ' + r.partes.map((p) => p.sobre + ' ' + U.money0(p.monto)).join(', ') : 'No había nada que repartir', r && r.partes.length ? 'largo' : '');
       refrescar();
     },
@@ -185,16 +187,27 @@
     'bloquear': () => { App.ui.bloqueado = true; App.ui.pinIn = ''; App.cerrarHoja(true); refrescar(); },
     'pin-tecla': async (el) => {
       const k = el.dataset.k;
+      if (App.ui.abriendo) return;
+      U.haptic('suave'); // aquí sí: todavía estamos dentro del toque
       if (k === 'del') App.ui.pinIn = App.ui.pinIn.slice(0, -1);
       else if (App.ui.pinIn.length < 4) App.ui.pinIn += k;
+      const pintar = () => { const p = document.getElementById('pin-puntos'); if (p) [].forEach.call(p.children, (d, i) => d.classList.toggle('on', i < App.ui.pinIn.length)); else refrescar(); };
+      pintar();
       if (App.ui.pinIn.length === 4) {
         const hash = await U.sha256('cdf:' + App.ui.pinIn);
-        if (hash === App.state.ajustes.pin) { App.ui.bloqueado = false; App.ui.pinIn = ''; U.haptic(); refrescar(); return; }
-        App.ui.pinIn = ''; refrescar();
-        const p = document.getElementById('pin-puntos'); if (p) { p.classList.add('error'); if (navigator.vibrate) navigator.vibrate([30, 40, 30]); }
-        return;
+        if (hash === App.state.ajustes.pin) {
+          App.ui.pinIn = ''; App.ui.abriendo = true;
+          U.sonido('abrir');
+          const b = document.querySelector('.bloqueo');
+          const abrir = () => { App.ui.abriendo = false; App.ui.bloqueado = false; refrescar(); };
+          if (b && !U.sinMovimiento()) { b.classList.add('abriendo'); setTimeout(abrir, 420); } else abrir();
+          return;
+        }
+        App.ui.pinIn = '';
+        const p = document.getElementById('pin-puntos');
+        if (p) { p.classList.remove('error'); void p.offsetWidth; p.classList.add('error'); setTimeout(pintar, 280); if (navigator.vibrate && App.state.ajustes.vibracion !== false) navigator.vibrate([30, 40, 30]); }
+        else refrescar();
       }
-      refrescar();
     },
     'pin-set': async (el) => {
       const h = App.h; const k = el.dataset.k; const campo = h.paso === 'nuevo' ? 'p1' : 'p2';
@@ -275,7 +288,8 @@
         sobranteA: h.tipo === 'limite' ? (h.sobranteA || '') : '', disponible: h.tipo !== 'tarjeta' && !!h.disponible,
         frecPago: U.frec(h.frecPago), frecAporte: h.tipo === 'tarjeta' ? (h.frecAporte || '') : U.frec(h.frecAporte || App.state.ajustes.frecIngreso),
         fechaPago: esGasto ? (h.fechaPago || '') : '', avisar: Number(h.avisar) || 0,
-        aporteManual: (esGasto || h.tipo === 'deuda') && h.manual ? num(h.aporteManual) : ''
+        aporteManual: (esGasto || h.tipo === 'deuda') && h.manual ? num(h.aporteManual) : '',
+        alerta: esGasto ? (h.alerta || '') : ''
       };
       if (h.tipo === 'deuda' && (!(datos.meta > 0) || !datos.hasta)) return App.toast('Pon el total y la fecha límite', 'error');
       if (h.tipo === 'ahorro' && datos.hasta && !(datos.meta > 0)) return App.toast('Pon la meta para esa fecha', 'error');
@@ -309,7 +323,7 @@
       const credito = h.tipo === 'credito';
       const dia = (v) => { const n = parseInt(v, 10); return n >= 1 && n <= 31 ? n : ''; };
       const datos = { nombre: h.nombre.trim(), icono: h.icono, tipo: credito ? 'credito' : 'normal' };
-      if (credito) Object.assign(datos, { limite: num(h.limite), diaCorte: dia(h.diaCorte), diaPago: dia(h.diaPago), avisar: Number(h.avisar) || 0, partes: false });
+      if (credito) Object.assign(datos, { limite: num(h.limite), diaCorte: dia(h.diaCorte), diaPago: dia(h.diaPago), avisar: Number(h.avisar) || 0, partes: false, limiteUso: num(h.limiteUso) || '', alerta: h.alerta || '' });
       else datos.partes = !!h.partes;
       if (credito && (!datos.diaCorte || !datos.diaPago)) return App.toast('Pon el día de corte y el de pago', 'error');
       const espId = h.esp || (App.espacioPrincipal() || {}).id;
@@ -360,7 +374,18 @@
       App.state.recurrentes = App.state.recurrentes.filter((r) => r.id !== App.h.id); App.save(); App.cerrarHoja(true); refrescar();
     },
     'perfil-guardar': () => { App.state.perfil.nombre = App.h.nombre.trim(); App.save(); App.cerrarHoja(true); refrescar(); },
-    'fondo': (el) => { App.state.ajustes.fondo = el.dataset.v; App.save(); document.body.dataset.fondo = el.dataset.v; App.renderHoja(); },
+    'fondo': (el) => { App.state.ajustes.fondo = el.dataset.v; App.save(); if (el.dataset.v === 'planetas') App.cosmos(); document.body.dataset.fondo = el.dataset.v; App.renderHoja(); },
+    'reg-limite': () => { if (App.h) App.abrirHoja('limite-tarjeta', { id: App.h.cuenta }, true); },
+    'lim-chip': (el) => { App.h.limiteUso = el.dataset.v; App.renderHoja(); },
+    'lim-guardar': () => {
+      const h = App.h; const ct = App.cuenta(h.id); if (!ct) return;
+      const v = U.r2(parseFloat(String(h.limiteUso || '').replace(/[^0-9.]/g, '')) || 0);
+      ct.limiteUso = v > 0 ? v : ''; ct.alerta = h.alerta || '';
+      App.save(); U.haptic(); App.toast(v > 0 ? 'Límite de uso: ' + U.money0(v) : 'Sin límite propio', 'ok');
+      App.cerrarHoja(false);
+    },
+    'al-gen': (el) => { App.state.ajustes[el.dataset.k] = Number(el.dataset.v); App.h[el.dataset.c] = el.dataset.v; App.save(); U.haptic('suave'); App.renderHoja(); },
+    'probar-sonidos': () => { U.haptic(); ['gasto', 'ingreso', 'alerta', 'logro'].forEach((t, i) => setTimeout(() => U.sonido(t), i * 650)); },
 
     /* google */
     'sync-guardar': async () => {
@@ -433,7 +458,15 @@
       App.h[el.dataset.m] = el.type === 'checkbox' ? el.checked : el.value;
       if (el.dataset.render || el.tagName === 'SELECT') App.renderHoja();
     }
-    if (el.dataset.sw) { App.state.ajustes[el.dataset.sw] = el.checked; App.save(); if (el.checked) U.haptic(); }
+    if (el.dataset.sw) {
+      App.state.ajustes[el.dataset.sw] = el.checked; App.save();
+      if (el.checked) { U.haptic(); if (el.dataset.sw === 'sonidos') U.sonido('ingreso'); }
+      if (App.h && App.h._hoja === 'alertas') App.renderHoja();
+    }
+    if (el.dataset.al) {
+      const obj = el.dataset.al === 'sobre' ? App.sobre(el.dataset.esp, el.dataset.id) : App.cuenta(el.dataset.id);
+      if (obj) { obj.alerta = el.value; App.save(); U.haptic('suave'); if (App.h) App.renderHoja(); }
+    }
   });
 
   /* ---------------- ciclo de vida ---------------- */
@@ -452,6 +485,24 @@
   let anchoPrev = window.innerWidth;
   window.addEventListener('resize', () => { if (Math.abs(window.innerWidth - anchoPrev) > 40 && !App.h) { anchoPrev = window.innerWidth; App.render(); } });
 
+  /* ---------------- bienvenida animada (cada vez que se abre la app) ---------------- */
+  App.splash = () => {
+    const sp = document.getElementById('splash');
+    if (!sp) return;
+    if (U.sinMovimiento()) { sp.remove(); return; }
+    const S = App.state; const n = (S.perfil.nombre || '').trim().split(' ')[0];
+    const sal = document.getElementById('sp-saludo');
+    if (sal) sal.textContent = S.ajustes.onboarding || !S.cuentas.length ? 'Tus finanzas en sobres' : U.saludo() + (n ? ', ' + n : '');
+    let ido = false;
+    const salir = () => {
+      if (ido) return; ido = true;
+      sp.classList.add('fuera');
+      setTimeout(() => sp.remove(), 650);
+    };
+    sp.addEventListener('pointerdown', salir, { once: true });
+    setTimeout(salir, App.ui.bloqueado ? 1100 : 1500);
+  };
+
   App.iniciar = () => {
     App.load();
     if (App.state.ajustes.pin) App.ui.bloqueado = true;
@@ -460,6 +511,7 @@
       if (hechos.length) setTimeout(() => App.toast('Sobrantes: ' + hechos.map((x) => x.de + ' → ' + x.a + ' ' + U.money0(x.monto)).join(', '), 'largo'), 800);
     }
     App.render();
+    App.splash();
     App.persistir();
     App.sync.auto();
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});

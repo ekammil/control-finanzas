@@ -12,6 +12,15 @@
   }).join('') : '<div class="nota">Sin movimientos todavía.</div>';
 
   const num = (v) => U.r2(parseFloat(String(v === undefined || v === null ? '' : v).replace(/[^0-9.]/g, '')) || 0);
+  const OPC_PCT = ['5', '10', '15', '20', '25', '30', '40', '50'];
+  // selector de alerta: '' general · % · 'pasar' · 'no'
+  const selAlerta = (v, general, attrs) => {
+    v = v === undefined || v === null ? '' : String(v);
+    const opc = [['', 'General · ' + general + '%']].concat(OPC_PCT.map((p) => [p, 'Al quedar ' + p + '%']), [['pasar', 'Solo si me paso'], ['no', 'Nunca']]);
+    if (v && !opc.some((o) => o[0] === v)) opc.splice(1, 0, [v, 'Al quedar ' + v + '%']);
+    return '<select ' + attrs + '>' + opc.map((o) => '<option value="' + o[0] + '" ' + (o[0] === v ? 'selected' : '') + '>' + o[1] + '</option>').join('') + '</select>';
+  };
+  App.selAlerta = selAlerta;
   const faltaTxt = (st) => (st.falta > 0 ? ' · faltan ' + U.money0(st.falta) : ' ✓');
   const descSobre = (s, st) => {
     if (s.tipo === 'gasto' || s.tipo === 'limite') {
@@ -263,6 +272,7 @@
         y += '<label class="campo"><span>Al terminar cada periodo, lo que sobre pasa a…</span><select data-m="sobranteA"><option value="">Se queda en el sobre</option>' +
           e.sobres.filter((s) => s.id !== h.id && s.tipo !== 'tarjeta').map((s) => '<option value="' + s.id + '" ' + (h.sobranteA === s.id ? 'selected' : '') + '>' + U.esc(s.icono + ' ' + s.nombre) + '</option>').join('') + '</select></label>';
       }
+      if (esGasto) y += '<label class="campo"><span>' + I.bell + ' Avisarme cuando quede poco</span>' + selAlerta(h.alerta, App.state.ajustes.alertaSobre, 'data-m="alerta"') + '<small>' + (h.fechaPago ? 'En pagos con fecha solo te aviso si te pasas.' : 'Te aviso al registrar un gasto y en "Para ti".') + '</small></label>';
       y += emojiPicker(h.icono);
       if (h.tipo !== 'tarjeta') y += '<label class="interruptor"><div class="txt"><b>Cuenta como disponible</b><small>Actívalo si este dinero lo puedes gastar en lo que quieras (como Ocio).</small></div><span class="sw"><input type="checkbox" data-m="disponible" ' + (h.disponible ? 'checked' : '') + '><i></i></span></label>';
       y += '<button class="btn" data-a="sobre-guardar">' + I.check + 'Guardar</button>';
@@ -296,7 +306,7 @@
       return {
         id: d.id || '', tipo: credito ? 'credito' : 'normal', nombre: c ? c.nombre : '', icono: c ? c.icono : (credito ? '💳' : '🏦'),
         partes: c ? !!c.partes : false, limite: c && c.limite ? String(c.limite) : '', diaCorte: c && c.diaCorte ? String(c.diaCorte) : '', diaPago: c && c.diaPago ? String(c.diaPago) : '',
-        avisar: c && c.avisar !== undefined ? String(c.avisar) : '3', saldo: '', saldoB: '', saldoM: '', debe: '', esp: (App.espacioPrincipal() || {}).id
+        avisar: c && c.avisar !== undefined ? String(c.avisar) : '3', limiteUso: c && c.limiteUso ? String(c.limiteUso) : '', alerta: c && c.alerta !== undefined ? String(c.alerta) : '', saldo: '', saldoB: '', saldoM: '', debe: '', esp: (App.espacioPrincipal() || {}).id
       };
     },
     render: (h) => {
@@ -310,6 +320,8 @@
         y += '<div class="dos"><label class="campo"><span>Día de corte</span><input inputmode="numeric" data-m="diaCorte" value="' + U.esc(h.diaCorte) + '" placeholder="1 a 31"></label>' +
           '<label class="campo"><span>Día límite de pago</span><input inputmode="numeric" data-m="diaPago" value="' + U.esc(h.diaPago) + '" placeholder="1 a 31"></label></div>';
         y += '<label class="campo"><span>Avisarme antes del pago</span><select data-m="avisar">' + [0, 1, 2, 3, 5, 7].map((n) => '<option value="' + n + '" ' + (String(h.avisar) === String(n) ? 'selected' : '') + '>' + (n === 0 ? 'El mismo día' : n + (n === 1 ? ' día antes' : ' días antes')) + '</option>').join('') + '</select></label>';
+        y += '<label class="campo"><span>Límite de uso (opcional)</span><input inputmode="decimal" data-m="limiteUso" value="' + U.esc(h.limiteUso) + '" placeholder="Ej. 300"><small>Lo máximo que quieres deber en esta tarjeta, aunque el banco te preste más.</small></label>';
+        y += '<label class="campo"><span>' + I.bell + ' Avisarme cuando quede poco crédito</span>' + selAlerta(h.alerta, App.state.ajustes.alertaTarjeta, 'data-m="alerta"') + '</label>';
         y += '<p class="nota">Lo que compres con ella sale de tu sobre al momento, o si eliges "Pagar poco a poco", se aparta de tus ingresos ' + U.FREC_CADA[App.state.ajustes.frecIngreso] + ' hasta la fecha de pago.' + (!h.id ? ' Lo que ya debes se junta poco a poco.' : '') + '</p>';
       } else {
         y += '<label class="interruptor"><div class="txt"><b>Separar billetes y monedas</b><small>Para efectivo: ves cuánto tienes de cada uno</small></div><span class="sw"><input type="checkbox" data-m="partes" data-render="1" ' + (h.partes ? 'checked' : '') + '><i></i></span></label>';
@@ -374,6 +386,65 @@
     }
   };
 
+  /* ---------- Límite de uso de una tarjeta (desde Registrar) ---------- */
+  H['limite-tarjeta'] = {
+    titulo: 'Límite de uso',
+    init: (d) => { const ct = App.cuenta(d.id) || {}; return { id: d.id, limiteUso: ct.limiteUso ? String(ct.limiteUso) : '', alerta: ct.alerta !== undefined ? String(ct.alerta) : '' }; },
+    render: (h) => {
+      const ct = App.cuenta(h.id); if (!ct) return '';
+      const x = App.usoTarjeta(ct);
+      let y = '<p class="nota" style="margin-top:0">' + U.esc(ct.icono + ' ' + ct.nombre) + ': debes <b class="num">' + U.money(x.debe) + '</b>' + (Number(ct.limite) > 0 ? ' de ' + U.money0(ct.limite) + ' que te presta el banco' : '') + '.</p>';
+      y += '<label class="campo"><span>¿Hasta cuánto quieres deber?</span><input inputmode="decimal" data-m="limiteUso" value="' + U.esc(h.limiteUso) + '" placeholder="Sin límite propio"><small>Déjalo vacío para usar solo el límite del banco.</small></label>';
+      if (Number(ct.limite) > 0) y += '<div class="chips">' + [0.3, 0.5, 0.8].map((f) => { const v = String(Math.round(ct.limite * f)); return chip(h.limiteUso === v, 'lim-chip', 'data-v="' + v + '"', Math.round(f * 100) + '% · ' + U.money0(v)); }).join('') + '</div>';
+      y += '<label class="campo"><span>' + I.bell + ' Avisarme cuando quede poco</span>' + selAlerta(h.alerta, App.state.ajustes.alertaTarjeta, 'data-m="alerta"') + '</label>';
+      y += '<button class="btn" data-a="lim-guardar">' + I.check + 'Guardar</button>';
+      return y;
+    }
+  };
+
+  /* ---------- Alertas ---------- */
+  H.alertas = {
+    titulo: 'Alertas',
+    init: () => ({ sobreP: String(App.state.ajustes.alertaSobre), tarjetaP: String(App.state.ajustes.alertaTarjeta) }),
+    alEscribir: (h, el) => {
+      const k = el.dataset.m === 'sobreP' ? 'alertaSobre' : el.dataset.m === 'tarjetaP' ? 'alertaTarjeta' : '';
+      const n = parseInt(el.value, 10);
+      if (k && n >= 1 && n <= 95) { App.state.ajustes[k] = n; App.save(); }
+    },
+    render: (h) => {
+      const S = App.state; const a = S.ajustes; const c = App.calc();
+      const sw = (k, t, sub) => '<label class="interruptor"><div class="txt"><b>' + t + '</b><small>' + sub + '</small></div><span class="sw"><input type="checkbox" data-sw="' + k + '" ' + (a[k] !== false ? 'checked' : '') + '><i></i></span></label>';
+      let y = sw('alertas', 'Avisarme antes de quedarme sin dinero', 'Al registrar un gasto y en "Para ti"');
+      if (a.alertas === false) return y + sw('sonidos', 'Sonidos', 'Al gastar, al recibir dinero y en alertas') + sw('vibracion', 'Vibración', 'Al guardar y en alertas');
+      const bloque = (titulo, k, campo, desc) => '<div class="etq">' + titulo + '</div><div class="chips">' + ['10', '20', '30', '50'].map((p) => chip(String(a[k]) === p, 'al-gen', 'data-k="' + k + '" data-c="' + campo + '" data-v="' + p + '"', p + '%')).join('') + '</div>' +
+        '<label class="campo"><span>O escribe tu %</span><input inputmode="numeric" data-m="' + campo + '" value="' + U.esc(h[campo]) + '" placeholder="20" maxlength="2"><small>' + desc + '</small></label>';
+      y += bloque('Sobres: avisar cuando quede', 'alertaSobre', 'sobreP', 'Ej. con 20%, si tu sobre es de $500 a la semana te aviso cuando queden $100. Si te pasas, siempre te aviso.');
+      if (S.cuentas.some(App.esCredito)) y += bloque('Tarjetas: avisar cuando quede de crédito', 'alertaTarjeta', 'tarjetaP', 'Cuenta tu límite de uso si lo pusiste; si no, el del banco.');
+      const sobres = [];
+      S.espacios.forEach((e) => e.sobres.forEach((s) => { if (s.tipo === 'gasto' || s.tipo === 'limite') sobres.push([e, s]); }));
+      if (sobres.length) {
+        y += '<div class="etq">Cada sobre</div><div class="lista-al">';
+        sobres.forEach(([e, s]) => {
+          const st = c.sob[s.id];
+          y += '<div class="fila-al"><div class="txt"><b>' + U.esc(s.icono + ' ' + s.nombre) + '</b><small>' + (st && st.M > 0 ? U.money0(st.M) + ' ' + U.FREC_POR[U.frec(s.frecPago)] + (s.fechaPago ? ' · pago con fecha' : '') : 'Sin monto') + '</small></div>' + selAlerta(s.alerta, a.alertaSobre, 'data-al="sobre" data-esp="' + e.id + '" data-id="' + s.id + '"') + '</div>';
+        });
+        y += '</div>';
+      }
+      const tarjetas = S.cuentas.filter(App.esCredito);
+      if (tarjetas.length) {
+        y += '<div class="etq">Cada tarjeta</div><div class="lista-al">';
+        tarjetas.forEach((ct) => {
+          const x = App.usoTarjeta(ct, c);
+          y += '<div class="fila-al"><div class="txt"><b>' + U.esc(ct.icono + ' ' + ct.nombre) + '</b><small>' + (x.L > 0 ? 'Quedan ' + U.money0(x.disp) + ' de ' + U.money0(x.L) + (x.propio ? ' (tu límite)' : '') : 'Sin límite') + '</small></div>' + selAlerta(ct.alerta, a.alertaTarjeta, 'data-al="cuenta" data-id="' + ct.id + '"') + '</div>';
+        });
+        y += '</div><p class="nota">Para poner un límite de uso: Cuentas → tu tarjeta, o al registrar un gasto con ella.</p>';
+      }
+      y += '<div class="etq">Sonido y vibración</div>' + sw('sonidos', 'Sonidos', 'Al gastar, al recibir dinero y en alertas. Respeta el modo silencio.') + sw('vibracion', 'Vibración', 'Al guardar y en alertas. En iPhone necesita iOS 18 o más nuevo.');
+      y += '<button class="btn sec" data-a="probar-sonidos">🔊 Probar sonidos</button>';
+      return y;
+    }
+  };
+
   /* ---------- Perfil, fondo ---------- */
   H.perfil = {
     titulo: 'Nombre',
@@ -384,9 +455,9 @@
     titulo: 'Fondo',
     render: () => {
       const actual = App.state.ajustes.fondo;
-      const prev = { aurora: 'radial-gradient(circle at 20% 20%,#5b3cc4,transparent 60%),radial-gradient(circle at 80% 40%,#1f6fd1,transparent 60%),#000', oceano: 'radial-gradient(circle at 20% 20%,#0d6e8a,transparent 60%),radial-gradient(circle at 80% 40%,#1d4fbf,transparent 60%),#000', brasa: 'radial-gradient(circle at 20% 20%,#b5402a,transparent 60%),radial-gradient(circle at 80% 40%,#c77a1e,transparent 60%),#000', bosque: 'radial-gradient(circle at 20% 20%,#1f7a4f,transparent 60%),radial-gradient(circle at 80% 40%,#3c6e2a,transparent 60%),#000', grafito: 'radial-gradient(circle at 20% 20%,#4a4d57,transparent 60%),radial-gradient(circle at 80% 40%,#2f3440,transparent 60%),#000', negro: '#000' };
-      return '<p class="nota" style="margin-top:0">Cada sección mueve el fondo un poco para que se sienta distinta.</p><div class="dos" style="gap:12px;margin-top:12px">' +
-        App.FONDOS.map((f) => '<button data-a="fondo" data-v="' + f.id + '" style="height:110px;border-radius:18px;background:' + prev[f.id] + ';border:2px solid ' + (f.id === actual ? '#fff' : 'rgba(255,255,255,.1)') + ';display:flex;align-items:flex-end;padding:10px;font-weight:600">' + f.nombre + '</button>').join('') + '</div>';
+      const prev = { aurora: 'radial-gradient(circle at 20% 20%,#5b3cc4,transparent 60%),radial-gradient(circle at 80% 40%,#1f6fd1,transparent 60%),#000', oceano: 'radial-gradient(circle at 20% 20%,#0d6e8a,transparent 60%),radial-gradient(circle at 80% 40%,#1d4fbf,transparent 60%),#000', brasa: 'radial-gradient(circle at 20% 20%,#b5402a,transparent 60%),radial-gradient(circle at 80% 40%,#c77a1e,transparent 60%),#000', bosque: 'radial-gradient(circle at 20% 20%,#1f7a4f,transparent 60%),radial-gradient(circle at 80% 40%,#3c6e2a,transparent 60%),#000', grafito: 'radial-gradient(circle at 20% 20%,#4a4d57,transparent 60%),radial-gradient(circle at 80% 40%,#2f3440,transparent 60%),#000', negro: '#000', planetas: 'radial-gradient(circle at 78% 26%,#7fc4ff 0,#2a6fd6 13%,#0d2f6e 22%,transparent 23%),radial-gradient(circle at 30% 70%,#e0b98a 0,#9c6b3c 8%,transparent 9%),radial-gradient(1px 1px at 20% 30%,#fff,transparent),radial-gradient(1px 1px at 60% 80%,#fff,transparent),radial-gradient(1px 1px at 45% 15%,#fff,transparent),radial-gradient(1px 1px at 85% 60%,#fff,transparent),radial-gradient(ellipse at 70% 10%,#14254d,#000 70%)' };
+      return '<p class="nota" style="margin-top:0">Cada sección mueve el fondo un poco para que se sienta distinta. En <b>Planetas</b>, cada sección tiene su propio planeta.</p><div class="dos" style="gap:12px;margin-top:12px">' +
+        App.FONDOS.map((f) => '<button data-a="fondo" data-v="' + f.id + '" style="height:110px;border-radius:18px;background:' + prev[f.id] + ';border:2px solid ' + (f.id === actual ? '#fff' : 'rgba(255,255,255,.1)') + ';display:flex;align-items:flex-end;padding:10px;font-weight:600">' + f.nombre + (f.nuevo ? ' <small class="pill-nuevo">Nuevo</small>' : '') + '</button>').join('') + '</div>';
     }
   };
 

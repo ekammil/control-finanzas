@@ -535,4 +535,59 @@
     lista.sort((a, b) => (a.urge === b.urge ? 0 : a.urge ? -1 : 1) || (a.urge ? a.venc.localeCompare(b.venc) : 0) || a.i - b.i);
     return lista;
   };
+  /* ---------------- Alertas de sobres y tarjetas ----------------
+     alerta (por sobre o tarjeta): '' = usar la general · número = avisar con ese % restante ·
+     'pasar' = solo cuando me pase · 'no' = nunca */
+  App.umbral = (v, general) => {
+    if (v === 'no') return null;
+    if (v === 'pasar') return 0;
+    if (v === '' || v === undefined || v === null) return Number(general) || 0;
+    return Number(v) || 0;
+  };
+  App.OPC_ALERTA = [['', 'Usar la general'], ['10', 'Al 10%'], ['20', 'Al 20%'], ['30', 'Al 30%'], ['50', 'Al 50%'], ['pasar', 'Solo si me paso'], ['no', 'Nunca']];
+
+  App.alertaSobre = (s, st) => {
+    const a = App.state.ajustes;
+    if (a.alertas === false || !s || !st || !(s.tipo === 'gasto' || s.tipo === 'limite')) return null;
+    const u = App.umbral(s.alerta, a.alertaSobre);
+    if (u === null || !(st.M > 0)) return null;
+    const restante = U.r2(st.M - st.gastadoCiclo);
+    const pct = restante / st.M * 100;
+    const cuando = U.FREC_ESTE[U.frec(s.frecPago)];
+    if (restante < -0.004) return { nivel: 'pasado', restante, pct, texto: s.nombre + ': te pasaste ' + U.money(-restante) + ' ' + cuando, corto: 'Te pasaste ' + U.money(-restante) + ' de ' + U.money(st.M) + ' ' + cuando };
+    // los pagos con fecha (renta, gym) solo avisan si te pasas: al pagarlos se usa el 100%
+    if (s.fechaPago || !(u > 0) || pct > u + 1e-9) return null;
+    return { nivel: 'poco', restante, pct, texto: s.nombre + ': te queda' + (restante === 1 ? '' : 'n') + ' ' + U.money(restante) + ' (' + Math.round(pct) + '%) ' + cuando, corto: 'Te queda ' + U.money(restante) + ' de ' + U.money(st.M) + ' ' + cuando + ' (' + Math.round(pct) + '%)' };
+  };
+
+  // Hasta dónde quieres usar la tarjeta: tu límite de uso (si lo pusiste) o el del banco
+  App.limiteTarjeta = (ct) => {
+    const l = [Number(ct.limiteUso) || 0, Number(ct.limite) || 0].filter((x) => x > 0);
+    return l.length ? Math.min.apply(null, l) : 0;
+  };
+  App.usoTarjeta = (ct, c, extra) => {
+    const debe = U.r2(Math.max(0, -((c || App.calc()).cuentas[ct.id] || 0)) + (extra || 0));
+    const L = App.limiteTarjeta(ct);
+    const propio = Number(ct.limiteUso) > 0 && (!(Number(ct.limite) > 0) || Number(ct.limiteUso) < Number(ct.limite));
+    return { debe, L, propio, disp: U.r2(L - debe), pct: L > 0 ? (L - debe) / L * 100 : 100 };
+  };
+  App.alertaTarjeta = (ct, c) => {
+    const a = App.state.ajustes;
+    if (a.alertas === false || !App.esCredito(ct)) return null;
+    const u = App.umbral(ct.alerta, a.alertaTarjeta);
+    const x = App.usoTarjeta(ct, c);
+    if (u === null || !(x.L > 0)) return null;
+    const de = x.propio ? 'de tu límite de uso' : 'de crédito';
+    if (x.disp < -0.004) return Object.assign(x, { nivel: 'pasado', texto: ct.nombre + ': te pasaste ' + U.money(-x.disp) + ' ' + (x.propio ? 'de tu límite de uso' : 'del límite') });
+    if (!(u > 0) || x.pct > u + 1e-9) return null;
+    return Object.assign(x, { nivel: 'poco', texto: ct.nombre + ': te queda' + (x.disp === 1 ? '' : 'n') + ' ' + U.money(x.disp) + ' ' + de + ' (' + Math.round(x.pct) + '%)' });
+  };
+  // Todas las alertas activas (para "Para ti")
+  App.alertas = (c) => {
+    const out = [];
+    App.state.espacios.forEach((e) => e.sobres.forEach((s) => { const al = App.alertaSobre(s, c.sob[s.id]); if (al) out.push(Object.assign(al, { tipo: 'sobre', s, e })); }));
+    App.state.cuentas.forEach((ct) => { const al = App.alertaTarjeta(ct, c); if (al) out.push(Object.assign(al, { tipo: 'tarjeta', ct })); });
+    out.sort((a, b) => (a.nivel === b.nivel ? a.pct - b.pct : a.nivel === 'pasado' ? -1 : 1));
+    return out;
+  };
 })();

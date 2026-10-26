@@ -92,6 +92,15 @@
       out.push('<div class="aviso"><div class="ico">' + I.inbox + '</div><div class="txt"><b>Pago con tarjeta: ' + U.money(b.monto) + '</b><p>' + U.esc(b.comercio || 'Sin comercio') + ' · ' + U.fechaRel(b.fecha || hoy) + '</p>' +
         '<div class="acciones"><button class="btn-chico blanco" data-a="bandeja" data-id="' + b.id + '">Elegir sobre</button><button class="btn-chico" data-a="bandeja-descartar" data-id="' + b.id + '">Descartar</button></div></div></div>');
     });
+    // alertas: sobres o tarjetas en las que te pasaste o te queda poco
+    App.alertas(c).slice(0, 4).forEach((al) => {
+      const ver = al.tipo === 'sobre' ? 'data-h="sobre" data-esp="' + al.e.id + '" data-id="' + al.s.id + '"' : 'data-h="cuenta" data-id="' + al.ct.id + '"';
+      const titulo = al.tipo === 'sobre' ? U.esc(al.s.icono + ' ' + al.s.nombre) : '💳 ' + U.esc(al.ct.nombre);
+      const det = al.tipo === 'sobre' ? al.corto : al.nivel === 'pasado' ? 'Te pasaste ' + U.money(-al.disp) + ' ' + (al.propio ? 'de tu límite de uso (' + U.money0(al.L) + ')' : 'del límite (' + U.money0(al.L) + ')') : 'Te queda' + (al.disp === 1 ? '' : 'n') + ' ' + U.money(al.disp) + ' de ' + U.money0(al.L) + (al.propio ? ' (tu límite de uso)' : ' de crédito') + ' · ' + Math.round(al.pct) + '%';
+      out.push('<div class="aviso al-' + al.nivel + '"><div class="ico">' + (al.nivel === 'pasado' ? '🚨' : '⚠️') + '</div><div class="txt"><b>' + titulo + (al.nivel === 'pasado' ? ' · te pasaste' : ' · queda poco') + '</b><p>' + det + '</p>' +
+        '<i class="ir-barra"><i style="transform:scaleX(' + Math.max(0, Math.min(1, al.pct / 100)).toFixed(3) + ')" class="bajo"></i></i>' +
+        '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" ' + ver + '>Ver</button><button class="btn-chico" data-a="hoja" data-h="alertas">Ajustar alertas</button></div></div></div>');
+    });
     // resumen semanal (lunes o primer día que abras la semana)
     const ini = U.weekStart(hoy);
     if (S.ajustes.ultimoResumen && S.ajustes.ultimoResumen < ini && S.movs.length) {
@@ -250,7 +259,9 @@
       fila('ir', I.target, 'Próximos pagos', 'Fechas de pago y avisos', 'data-p="metas"') + '</div>';
     h += '<div class="seccion"><div class="seccion-titulo"><h2>Hábitos</h2></div>' +
       sw('cuadreNoche', 'Cuadre de la noche', 'Después de las 8 pm te sugiere revisar tu dinero real') +
-      sw('vibracion', 'Vibración', 'Al guardar un movimiento') + '</div>';
+      fila('hoja', I.bell, 'Alertas', a.alertas === false ? 'Desactivadas' : 'Sobres al ' + a.alertaSobre + '% · tarjetas al ' + a.alertaTarjeta + '%', 'data-h="alertas"') +
+      sw('sonidos', 'Sonidos', 'Al gastar, al recibir dinero y en alertas') +
+      sw('vibracion', 'Vibración', 'Al guardar y en alertas') + '</div>';
     h += '<div class="seccion"><div class="seccion-titulo"><h2>Seguridad y respaldo</h2></div>' +
       fila('hoja', I.lock, 'Bloqueo con código', a.pin ? 'Activado' : 'Desactivado', 'data-h="pin"') +
       fila('hoja', I.download, 'Copia de seguridad', 'Guardar o recuperar tus datos en un archivo', 'data-h="respaldo"') +
@@ -259,7 +270,7 @@
       fila('hoja', I.phone, 'Instalar en tu teléfono', 'iPhone y Android', 'data-h="instalar"') +
       fila('hoja', I.apple, 'Atajos del iPhone', 'Gasto rápido y Apple Pay', 'data-h="atajo"') + '</div>';
     h += '<div class="seccion"><button class="btn peligro" data-a="hoja" data-h="borrar">Borrar todos mis datos</button>' +
-      '<p class="nota" style="text-align:center">Control de Finanzas · v1.2 · Tus datos viven en este teléfono.</p></div>';
+      '<p class="nota" style="text-align:center">Control de Finanzas · v1.3 · Tus datos viven en este teléfono.</p></div>';
     h += '</div>';
     return h;
   };

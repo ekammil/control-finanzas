@@ -128,15 +128,80 @@
     }
   };
 
-  // Vibración: Android usa vibrate; iPhone (iOS 18+) usa el truco del interruptor nativo
-  U.haptic = () => {
+  // Vibración. Android: navigator.vibrate. iPhone (iOS 18+): no tiene vibrate, pero tocar un
+  // interruptor nativo (<input switch>) da un "tic" del Taptic Engine; se crea uno invisible y se
+  // toca por código. Solo funciona dentro de un toque del usuario (no después de un await).
+  const ticIOS = () => {
+    const l = document.createElement('label');
+    l.setAttribute('aria-hidden', 'true'); l.style.display = 'none';
+    const i = document.createElement('input'); i.type = 'checkbox'; i.setAttribute('switch', '');
+    l.appendChild(i); document.head.appendChild(l); l.click(); document.head.removeChild(l);
+  };
+  U.haptic = (tipo) => {
     try {
       if (!window.App || !App.state || App.state.ajustes.vibracion === false) return;
-      if (navigator.vibrate) { navigator.vibrate(12); return; }
-      const l = document.getElementById('haptic-label');
-      if (l) l.click();
+      const doble = tipo === 'alerta';
+      if (typeof navigator.vibrate === 'function') { navigator.vibrate(doble ? [18, 70, 18] : tipo === 'suave' ? 8 : 14); return; }
+      ticIOS();
+      if (doble) setTimeout(() => { try { ticIOS(); } catch (e) { /* nada */ } }, 110);
     } catch (e) { /* nada */ }
   };
+
+  // Sonidos sintetizados (sin archivos, funcionan sin internet). Respetan el modo silencio del iPhone.
+  let ctx = null, master = null;
+  const audio = () => {
+    if (ctx) return ctx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try { if (navigator.audioSession) navigator.audioSession.type = 'ambient'; } catch (e) { /* nada */ }
+    ctx = new AC();
+    master = ctx.createGain(); master.gain.value = 0.22; master.connect(ctx.destination);
+    return ctx;
+  };
+  // iOS solo deja sonar el audio si se "despierta" dentro de un toque
+  const despertar = () => {
+    try {
+      if (!window.App || !App.state || App.state.ajustes.sonidos === false) return;
+      const c = audio(); if (!c) return;
+      if (c.state !== 'running') c.resume();
+      const b = c.createBuffer(1, 1, 22050); const s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(0);
+    } catch (e) { /* nada */ }
+  };
+  ['pointerdown', 'touchend', 'keydown'].forEach((ev) => document.addEventListener(ev, despertar, { passive: true, capture: true }));
+
+  const nota = (t, f, dur, opc) => {
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.type = (opc && opc.tipo) || 'sine';
+    o.frequency.setValueAtTime(f, t);
+    if (opc && opc.a) o.frequency.exponentialRampToValueAtTime(opc.a, t + dur);
+    const v = (opc && opc.vol) || 0.7;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(v, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
+  };
+  const SONIDOS = {
+    // moneda: dos notas brillantes
+    ingreso: (t) => { nota(t, 988, 0.09, { tipo: 'square', vol: 0.18 }); nota(t + 0.075, 1319, 0.42, { tipo: 'square', vol: 0.16 }); nota(t + 0.075, 2637, 0.3, { vol: 0.12 }); },
+    // gasto: "tic" suave que baja
+    gasto: (t) => { nota(t, 720, 0.12, { tipo: 'triangle', a: 420, vol: 0.55 }); nota(t + 0.05, 360, 0.12, { vol: 0.25 }); },
+    // alerta: dos tonos graves
+    alerta: (t) => { nota(t, 392, 0.16, { tipo: 'triangle', vol: 0.6 }); nota(t + 0.19, 311, 0.26, { tipo: 'triangle', vol: 0.6 }); },
+    // logro: arpegio hacia arriba
+    logro: (t) => { [523, 659, 784, 1047].forEach((f, i) => nota(t + i * 0.07, f, 0.32, { vol: 0.35 })); },
+    // abrir: subida suave
+    abrir: (t) => { nota(t, 523, 0.5, { a: 784, vol: 0.28 }); nota(t + 0.12, 1047, 0.45, { vol: 0.12 }); }
+  };
+  U.sonido = (tipo) => {
+    try {
+      if (!window.App || !App.state || App.state.ajustes.sonidos === false) return;
+      const c = audio(); if (!c || !SONIDOS[tipo]) return;
+      if (c.state !== 'running') c.resume();
+      SONIDOS[tipo](c.currentTime + 0.01);
+    } catch (e) { /* nada */ }
+  };
+
+  U.sinMovimiento = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
 
   U.saludo = () => {
     const h = new Date().getHours();

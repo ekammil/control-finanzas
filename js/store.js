@@ -20,7 +20,8 @@
     { id: 'brasa', nombre: 'Brasa' },
     { id: 'bosque', nombre: 'Bosque' },
     { id: 'grafito', nombre: 'Grafito' },
-    { id: 'negro', nombre: 'Negro' }
+    { id: 'negro', nombre: 'Negro' },
+    { id: 'planetas', nombre: 'Planetas', nuevo: true }
   ];
 
   App.EMOJIS = ['👤', '🏪', '🎰', '💼', '🏠', '🍽️', '🚌', '🎉', '🚗', '🛟', '💳', '📅', '📦', '📈', '🎓', '💊', '🎁', '👕', '📱', '🐶', '✈️', '🏋️', '☕', '🎮', '🧾', '💡', '🛒', '🏦', '💵', '🪙', '💰', '🎯', '⭐', '🔧', '❤️', '📚'];
@@ -41,7 +42,11 @@
       ultimaSync: 0,
       onboarding: true,
       rango: 'semana',
-      frecIngreso: 'semanal'
+      frecIngreso: 'semanal',
+      alertas: true,
+      alertaSobre: 20,
+      alertaTarjeta: 20,
+      sonidos: true
     },
     cuentas: [],
     espacios: [],

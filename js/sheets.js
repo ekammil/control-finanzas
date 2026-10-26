@@ -104,6 +104,7 @@
       x += '<div class="nota-fila"><input data-m="nota" value="' + U.esc(h.nota) + '" placeholder="' + (h.modo === 'gasto' ? 'Agregar nota (ej. Tacos)' : h.modo === 'ingreso' ? 'Agregar nota (ej. Pago del trabajo)' : 'Agregar nota') + '" maxlength="60" aria-label="Nota">' +
         '<label class="fecha-pill">' + (h.fecha === U.today() ? 'Hoy' : U.fechaCorta(h.fecha)) + '<input type="date" data-m="fecha" data-render="1" value="' + h.fecha + '" max="' + U.addDays(U.today(), 31) + '" aria-label="Fecha"></label></div>';
 
+      if (h.modo === 'gasto') { App._cReg = c; x += '<div class="info-reg" id="info-reg">' + App.infoReg(h, c) + '</div>'; }
       if (h.modo === 'gasto' || h.modo === 'ingreso') {
         const rap = h.editId ? [] : App.frecuentes(h.modo);
         if (rap.length) {
@@ -171,6 +172,40 @@
     }
   };
 
+  // Línea en vivo al registrar un gasto: cuánto te queda en el sobre y en la tarjeta
+  App.infoReg = (h, c) => {
+    c = c || App._cReg || App.calc(h.fecha);
+    const monto = h.editId ? 0 : App.montoNum(h);
+    const out = [];
+    const s = App.sobre(h.espacio, h.sobre); const st = s ? c.sob[s.id] : null;
+    if (s && st && (s.tipo === 'gasto' || s.tipo === 'limite') && st.M > 0 && !s.fechaPago && !h.diferido) {
+      const rest = U.r2(st.M - st.gastadoCiclo); const desp = U.r2(rest - monto);
+      const cuando = U.FREC_ESTE[U.frec(s.frecPago)];
+      let t;
+      if (rest < -0.004) t = '<b class="neg">Ya te pasaste ' + U.money(-rest) + '</b> de ' + U.money(st.M) + ' ' + cuando;
+      else if (monto > 0 && desp < -0.004) t = '<b class="neg">Con esto te pasas ' + U.money(-desp) + '</b> de ' + U.money(st.M) + ' ' + cuando;
+      else if (monto > 0) t = 'Te quedarán <b class="num">' + U.money(desp) + '</b> de ' + U.money(st.M) + ' ' + cuando;
+      else t = 'Te quedan <b class="num">' + U.money(rest) + '</b> de ' + U.money(st.M) + ' ' + cuando;
+      const pct = st.M > 0 ? Math.max(0, Math.min(1, (monto > 0 ? desp : rest) / st.M)) : 0;
+      out.push('<div class="ir-fila"><span class="ir-ico">' + U.esc(s.icono) + '</span><div class="ir-txt">' + t + '<i class="ir-barra"><i style="transform:scaleX(' + pct.toFixed(3) + ')" class="' + (pct <= 0.2 ? 'bajo' : '') + '"></i></i></div></div>');
+    }
+    const ct = App.cuenta(h.cuenta);
+    if (App.esCredito(ct)) {
+      const x = App.usoTarjeta(ct, c, monto);
+      let t;
+      if (!(x.L > 0)) t = 'Pon un límite de uso para saber cuánto te queda';
+      else {
+        const de = x.propio ? 'de tu límite de uso (' + U.money0(x.L) + ')' : 'de crédito';
+        if (x.disp < -0.004) t = '<b class="neg">' + (monto > 0 ? 'Con esto te pasas ' : 'Te pasaste ') + U.money(-x.disp) + '</b> ' + (x.propio ? 'de tu límite de uso (' + U.money0(x.L) + ')' : 'del límite de crédito');
+        else t = (monto > 0 ? 'Te quedarán ' : 'Te quedan ') + '<b class="num">' + U.money(x.disp) + '</b> ' + de;
+      }
+      const pct = x.L > 0 ? Math.max(0, Math.min(1, x.disp / x.L)) : 0;
+      out.push('<div class="ir-fila"><span class="ir-ico">💳</span><div class="ir-txt">' + t + (x.L > 0 ? '<i class="ir-barra"><i style="transform:scaleX(' + pct.toFixed(3) + ')" class="' + (pct <= 0.2 ? 'bajo' : '') + '"></i></i>' : '') +
+        '<button class="link" data-a="reg-limite">' + (Number(ct.limiteUso) > 0 ? 'Cambiar límite de uso' : 'Poner límite de uso') + '</button></div></div>');
+    }
+    return out.join('');
+  };
+
   App.tecladoHTML = () => '<div class="teclado">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del'].map((k) => '<button data-a="tecla" data-k="' + k + '" aria-label="' + (k === 'del' ? 'Borrar' : k) + '">' + (k === 'del' ? I.del : k) + '</button>').join('') + '</div>';
   App.montoNum = (h) => U.r2(parseFloat(h.monto || '0') || 0);
   App.montoTxt = (h) => {
@@ -196,12 +231,14 @@
     const b = document.getElementById('btn-guardar');
     if (b) b.disabled = !(App.montoNum(h) > 0);
     if (h.diferido && document.getElementById('nota-dif')) App.renderHoja();
+    else { const ir = document.getElementById('info-reg'); if (ir) ir.innerHTML = App.infoReg(h); }
   };
 
   App.guardarRegistro = () => {
     const h = App.h; const S = App.state;
     const monto = App.montoNum(h);
     if (!(monto > 0)) return App.toast('Escribe un monto', 'error');
+    let sonido = '';
     if (h.modo === 'mover') {
       if (h.moverModo === 'cuentas') {
         const c1 = App.cuenta(h.cuenta), c2c = App.cuenta(h.cuenta2);
@@ -236,24 +273,31 @@
         if (h.modo === 'gasto') {
           const c = App.calc(h.fecha);
           const s = App.sobre(h.espacio, h.sobre);
+          let base;
           if (diferido) {
             const t = App.sobreTarjeta(h.espacio, h.cuenta, false);
             const st = t ? c.sob[t.id] : null;
-            App.toast('A pagar poco a poco' + (st ? ' · ' + App.textoAporte(t, st) + (st.venc ? ' hasta el ' + U.fechaCorta(st.venc) : '') : ''), 'largo');
-          } else if (s) {
-            const st = c.sob[s.id];
-            if ((s.tipo === 'gasto' || s.tipo === 'limite') && !s.fechaPago && st.M > 0 && st.gastadoCiclo > st.M) App.toast(s.nombre + ': te pasaste ' + U.money(st.gastadoCiclo - st.M) + ' ' + U.FREC_ESTE[U.frec(s.frecPago)], 'error');
-            else App.toast('Guardado · ' + s.nombre + ': quedan ' + U.money(st.saldo), 'ok');
-          } else App.toast('Gasto guardado · Libre: ' + U.money(c.esp[h.espacio].libre), 'ok');
+            base = 'A pagar poco a poco' + (st ? ' · ' + App.textoAporte(t, st) + (st.venc ? ' hasta el ' + U.fechaCorta(st.venc) : '') : '');
+          } else if (s) base = 'Guardado · ' + s.nombre + ': quedan ' + U.money(c.sob[s.id].saldo);
+          else base = 'Gasto guardado · Libre: ' + U.money(c.esp[h.espacio].libre);
+          // alertas: te pasaste o te queda poco (en el sobre y en la tarjeta)
+          const als = [s && !diferido ? App.alertaSobre(s, c.sob[s.id]) : null, App.alertaTarjeta(cta, c)].filter(Boolean);
+          if (als.length) {
+            const pasado = als.some((al) => al.nivel === 'pasado');
+            App.toast(als.map((al) => al.texto).join('\n') + (diferido ? '\n' + base : ''), (pasado ? 'error' : 'aviso') + ' largo');
+            sonido = 'alerta';
+          } else { App.toast(base, diferido ? 'largo' : 'ok'); sonido = 'gasto'; }
         } else {
           const rep = r.reparto;
           let t = 'Ingreso guardado';
           if (rep && rep.partes.length) t += '\nRepartido: ' + rep.partes.map((p) => p.sobre + ' ' + U.money0(p.monto)).join(', ');
           App.toast(t, rep && rep.partes.length ? 'largo' : 'ok');
+          sonido = 'ingreso';
         }
       }
     }
-    U.haptic();
+    if (sonido) U.sonido(sonido);
+    U.haptic(sonido === 'alerta' ? 'alerta' : '');
     App.cerrarHoja(true);
     App.render();
   };

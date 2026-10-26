@@ -500,7 +500,7 @@
         const dest = ob.destino[e.id] && e.sobres.find((s) => s.id === ob.destino[e.id]);
         if (dest && resto > 0.004) S.movs.push(App.nuevoMov({ tipo: 'mover', monto: resto, espacio: e.id, sobre: '', espacio2: e.id, sobre2: dest.id, nota: 'Acomodo inicial', origen: 'auto' }));
       });
-      U.haptic();
+      U.haptic(); U.sonido('logro');
       terminar();
     },
     'ob-fin-sin': () => terminar()

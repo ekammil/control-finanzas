@@ -127,7 +127,7 @@
     t.innerHTML = U.esc(txt).replace(/\n/g, '<br>');
     requestAnimationFrame(() => t.classList.add('on'));
     clearTimeout(t._t);
-    t._t = setTimeout(() => t.classList.remove('on'), tipo === 'largo' ? 5200 : 2800);
+    t._t = setTimeout(() => t.classList.remove('on'), String(tipo || '').indexOf('largo') >= 0 ? 5200 : 2800);
   };
 
   /* Descripción corta de un movimiento */
@@ -162,5 +162,36 @@
     const monto = Math.abs(Number(m.monto));
     const txtMonto = signo > 0 ? '+' + U.money(monto) : signo < 0 ? '−' + U.money(monto) : U.money(monto);
     return { icono, titulo, sub, txtMonto, clase };
+  };
+  /* ---------------- Fondo "Planetas" ----------------
+     Se arma solo cuando se elige. Las estrellas se dibujan una vez en un canvas y se usan como
+     imagen repetida; todo lo que se mueve usa transform/opacity (lo hace la GPU, no se traba). */
+  const estrellas = (n, max, colores) => {
+    const t = 512; const cv = document.createElement('canvas'); cv.width = cv.height = t;
+    const g = cv.getContext('2d');
+    for (let i = 0; i < n; i++) {
+      const r = Math.random() * max + 0.3;
+      g.globalAlpha = 0.35 + Math.random() * 0.65;
+      g.fillStyle = colores[Math.floor(Math.random() * colores.length)];
+      g.beginPath(); g.arc(Math.random() * t, Math.random() * t, r, 0, 6.2832); g.fill();
+    }
+    return 'url(' + cv.toDataURL('image/png') + ')';
+  };
+  App.cosmos = () => {
+    const bg = document.querySelector('.bg');
+    if (!bg || bg.querySelector('.cosmos')) return;
+    const c = document.createElement('div'); c.className = 'cosmos';
+    const esfera = (extra) => '<div class="esfera"><i class="tex"></i>' + (extra || '') + '</div>';
+    c.innerHTML =
+      '<i class="estrellas lejos"></i><i class="estrellas cerca"></i><i class="fugaz"></i>' +
+      '<div class="pl tierra">' + esfera('<i class="nubes"></i>') + '<div class="luna-x"><div class="luna-y"><i class="luna"></i></div></div></div>' +
+      '<div class="pl marte">' + esfera('<i class="polo"></i>') + '</div>' +
+      '<div class="pl saturno"><i class="anillo atras"></i>' + esfera() + '<i class="anillo frente"></i></div>' +
+      '<div class="pl neptuno">' + esfera() + '</div>';
+    try {
+      c.querySelector('.lejos').style.backgroundImage = estrellas(170, 0.9, ['#ffffff', '#cfe0ff', '#ffe9c9']);
+      c.querySelector('.cerca').style.backgroundImage = estrellas(45, 1.6, ['#ffffff', '#bcd4ff']);
+    } catch (e) { /* sin canvas: solo planetas */ }
+    bg.appendChild(c);
   };
 })();
