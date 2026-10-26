@@ -193,5 +193,6 @@
       c.querySelector('.cerca').style.backgroundImage = estrellas(45, 1.6, ['#ffffff', '#bcd4ff']);
     } catch (e) { /* sin canvas: solo planetas */ }
     bg.appendChild(c);
+    if (App.planetas3D) App.planetas3D.montar(c);
   };
 })();
