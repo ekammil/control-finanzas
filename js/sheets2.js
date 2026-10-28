@@ -22,7 +22,19 @@
   };
   App.selAlerta = selAlerta;
   const faltaTxt = (st) => (st.falta > 0 ? ' · faltan ' + U.money0(st.falta) : ' ✓');
+  // "hoy ya ✓" o "hoy faltan $X" según el aporte de este periodo
+  const hoyTxt = (st) => { const cuando = st.frecAporte === 'diario' ? 'hoy' : U.FREC_ESTE[st.frecAporte]; return st.falta > 0 ? cuando + ' faltan ' + U.money0(st.falta) : cuando + ' ya ✓'; };
   const descSobre = (s, st) => {
+    if ((s.tipo === 'gasto' || s.tipo === 'limite') && !s.fechaPago && st.M > 0) {
+      const pc = App.presupuestoCiclo(s, st);
+      return 'Gastado ' + U.money0(st.gastadoCiclo) + ' de ' + U.money0(pc.M) + ' ' + U.FREC_ESTE[U.frec(s.frecPago)] + ' · te quedan ' + U.money0(Math.max(0, pc.M - st.gastadoCiclo));
+    }
+    if ((s.tipo === 'gasto' || s.tipo === 'limite') && s.fechaPago) return 'Pago de ' + U.money0(st.M) + ' el ' + U.fechaCorta(st.venc) + ' · te falta juntar ' + U.money0(Math.max(0, st.M - Math.max(0, st.saldo)));
+    if (s.tipo === 'ahorro' && !(s.meta > 0)) return 'Apartas ' + U.money0(st.cuota) + U.FREC_POR[st.frecAporte] + ' · ' + hoyTxt(st);
+    if (s.tipo === 'deuda') return 'Llevas ' + U.money0(st.pagado + Math.max(0, st.saldo)) + ' de ' + U.money0(s.meta) + ' · apartas ' + U.money0(st.cuota) + U.FREC_POR[st.frecAporte] + ' · ' + hoyTxt(st);
+    return descSobreBase(s, st);
+  };
+  const descSobreBase = (s, st) => {
     if (s.tipo === 'gasto' || s.tipo === 'limite') {
       if (s.fechaPago) return 'Pago de ' + U.money0(st.M) + ' el ' + U.fechaCorta(st.venc) + ' · llevas ' + U.money0(Math.max(0, st.saldo)) + faltaTxt(st);
       const pc = App.presupuestoCiclo(s, st);
@@ -105,7 +117,8 @@
       y += '<div class="dos" style="margin-top:16px">' +
         '<button class="btn sec" style="margin:0" data-a="repartir" data-id="' + e.id + '" ' + (x.libre > 0 && x.falta > 0 ? '' : 'disabled') + '>✨ Repartir</button>' +
         '<button class="btn sec" style="margin:0" data-a="hoja" data-h="registro" data-modo="mover" data-esp="' + e.id + '" data-apilar="1">' + I.swap + ' Mover</button></div>';
-      y += '<div class="seccion" style="margin-top:20px"><div class="seccion-titulo"><h2>Sobres</h2><button data-a="hoja" data-h="sobre-editar" data-esp="' + e.id + '" data-apilar="1">Agregar</button></div>';
+      y += '<div class="seccion" style="margin-top:20px"><div class="seccion-titulo"><h2>Sobres</h2><button data-a="hoja" data-h="sobre-editar" data-esp="' + e.id + '" data-apilar="1">Agregar</button></div>' +
+        '<p class="nota" style="margin:-4px 0 6px">El número de la derecha es lo que hay ahora en cada sobre. La barra muestra cuánto llevas gastado de lo planeado, o cuánto llevas juntado de tu pago o meta. Toca un sobre para ver todo el detalle.</p>';
       if (!e.sobres.length) y += '<div class="nota">Este espacio no tiene sobres. Agrega uno para organizar tu dinero.</div>';
       e.sobres.forEach((s) => {
         const st = c.sob[s.id];
@@ -113,13 +126,51 @@
         const clase = (s.tipo === 'gasto' || s.tipo === 'limite') ? st.estado : (s.meta > 0 ? 'azul' : st.estado);
         const conBarra = ((s.tipo === 'gasto' || s.tipo === 'limite') && st.cuota > 0) || s.meta > 0 || s.tipo === 'deuda';
         y += '<button class="fila" data-a="hoja" data-h="sobre" data-esp="' + e.id + '" data-id="' + s.id + '" data-apilar="1">' +
-          '<div class="ico">' + U.esc(s.icono) + '</div><div class="txt"><b>' + U.esc(s.nombre) + (s.disponible ? ' <small style="display:inline;color:var(--green)">· disponible</small>' : '') + '</b><small>' + descSobre(s, st) + '</small>' +
+          '<div class="ico">' + U.esc(s.icono) + '</div><div class="txt"><b>' + U.esc(s.nombre) + (s.disponible ? ' <small style="display:inline;color:var(--green)">· disponible</small>' : '') + '</b><small style="white-space:normal">' + descSobre(s, st) + '</small>' +
           (conBarra ? App.barraProg(p, clase) : '') + '</div>' +
-          '<div class="der"><b class="num">' + U.money(st.saldo) + '</b></div></button>';
+          '<div class="der"><b class="num ' + (st.saldo < -0.004 ? 'neg' : '') + '">' + U.money(st.saldo) + '</b><small>' + (s.tipo === 'tarjeta' && st.saldo < -0.004 ? 'por juntar' : 'en el sobre') + '</small></div></button>';
       });
       y += '</div><button class="btn sec" data-a="hoja" data-h="espacio-editar" data-id="' + e.id + '" data-apilar="1">' + I.edit + ' Editar espacio</button>';
       return y;
     }
+  };
+
+  /* Cuadro con todo lo de un sobre: lo que hay, lo gastado, lo que te queda, cuánto apartas y cuánto falta */
+  const cuadroSobre = (s, st) => {
+    const f = [];
+    const cuando = st.frecAporte === 'diario' ? 'hoy' : U.FREC_ESTE[st.frecAporte];
+    const esG = s.tipo === 'gasto' || s.tipo === 'limite';
+    const distinto = esG && !App.esManual(s) && st.falta > 0 && Math.abs(st.cuota - st.constante) > 0.5;
+    const ap = s.tipo === 'porIngreso' ? App.txtPorIngreso(s) : U.money(distinto ? st.cuota : esG ? st.constante : st.cuota) + U.FREC_POR[st.frecAporte];
+    if (s.tipo === 'tarjeta') f.push(['Por juntar', U.money(Math.max(0, -st.saldo)), 'ya juntaste ' + U.money0(Math.max(0, st.compras + st.saldo))]);
+    else f.push(['En el sobre', U.money(st.saldo), 'lo que tienes ahí ahora']);
+    if (s.tipo === 'gasto' || s.tipo === 'limite') {
+      const fP = U.frec(s.frecPago);
+      if (s.fechaPago) {
+        f.push(['Pago', U.money(st.M), 'el ' + U.fechaCorta(st.venc)]);
+        f.push(['Te falta juntar', U.money(Math.max(0, st.M - Math.max(0, st.saldo))), 'para ese pago']);
+        f.push(['Pagado', U.money(st.gastadoCiclo), 'en este ciclo']);
+      } else {
+        const pc = App.presupuestoCiclo(s, st);
+        f.push(['Planeado', U.money(pc.M), U.FREC_ESTE[fP]]);
+        f.push(['Gastado', U.money(st.gastadoCiclo), U.FREC_ESTE[fP]]);
+        const queda = pc.M - st.gastadoCiclo;
+        f.push(queda >= 0 ? ['Te queda por gastar', U.money(queda), U.FREC_ESTE[fP]] : ['Te pasaste', U.money(-queda), U.FREC_ESTE[fP]]);
+      }
+    } else if (s.tipo === 'ahorro' && s.meta > 0) {
+      f.push(['Meta', U.money(s.meta), s.hasta ? 'para el ' + U.fechaCorta(s.hasta) : '']);
+      f.push(['Te falta', U.money(Math.max(0, s.meta - Math.max(0, st.saldo))), 'para tu meta']);
+    } else if (s.tipo === 'deuda') {
+      f.push(['Ya pagaste', U.money(st.pagado), 'de ' + U.money0(s.meta)]);
+      f.push(['Te falta', U.money(Math.max(0, s.meta - st.pagado - Math.max(0, st.saldo))), s.hasta ? 'para el ' + U.fechaCorta(s.hasta) : '']);
+    } else if (s.tipo === 'tarjeta') {
+      f.push(['Compras a pagar', U.money(st.compras), st.venc ? 'pago el ' + U.fechaCorta(st.venc) : '']);
+    }
+    if (s.tipo !== 'porIngreso') {
+      f.push(['Apartas', ap, distinto ? 'por ahora (lo normal: ' + U.money(st.constante) + ')' : 'de tus ingresos']);
+      f.push(['Falta apartar', U.money(st.falta), st.falta > 0 ? cuando : cuando + ' ya está ✓']);
+    } else f.push(['Apartas', ap, '']);
+    return '<div class="cuadro-sobre">' + f.map(([t, v, d]) => '<div><span>' + t + '</span><b class="num">' + v + '</b>' + (d ? '<small>' + d + '</small>' : '') + '</div>').join('') + '</div>';
   };
 
   /* ---------- Sobre (detalle) ---------- */
@@ -136,7 +187,7 @@
         const act = s.tipo === 'deuda' ? st.pagado + Math.max(0, st.saldo) : Math.max(0, st.saldo);
         y += App.barraProg(s.meta ? act / s.meta : 0, 'azul') + '<div class="nota">' + U.money(act) + ' de ' + U.money(s.meta) + (s.hasta ? ' · límite ' + U.fechaCorta(s.hasta) : '') + '</div>';
       }
-      if (s.tipo !== 'porIngreso') y += '<div class="calc-aporte" style="margin-top:14px">Aporte: <b>' + App.textoAporte(s, st) + '</b>' + (st.falta > 0 ? '<small>Para ' + (st.frecAporte === 'diario' ? 'hoy' : U.FREC_ESTE[st.frecAporte]) + ' faltan ' + U.money(st.falta) + '.</small>' : '') + '</div>';
+      y += cuadroSobre(s, st);
       const ct = s.tipo === 'tarjeta' ? App.cuenta(s.cuenta) : null;
       y += '<div class="dos" style="margin-top:16px">' +
         (ct ? '<button class="btn sec" style="margin:0" data-a="hoja" data-h="cuenta" data-id="' + ct.id + '" data-apilar="1">💳 Ver tarjeta</button>'
