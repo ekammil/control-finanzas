@@ -32,7 +32,7 @@
   U.FREC_CADA = { diario: 'cada día', semanal: 'cada semana', quincenal: 'cada quincena', mensual: 'cada mes', semestral: 'cada semestre', anual: 'cada año' };
   U.FREC_ESTE = { diario: 'hoy', semanal: 'esta semana', quincenal: 'esta quincena', mensual: 'este mes', semestral: 'este semestre', anual: 'este año' };
   U.FREC_POR = { diario: '/día', semanal: '/sem', quincenal: '/quincena', mensual: '/mes', semestral: '/semestre', anual: '/año' };
-  U.FREC_VECES = { diario: 365, semanal: 52, quincenal: 24, mensual: 12, semestral: 2, anual: 1 }; // veces por año
+  U.FREC_VECES = { diario: 365, semanal: 365 / 7, quincenal: 24, mensual: 12, semestral: 2, anual: 1 }; // veces por año (semanal exacto: $70 a la semana = $10 al día)
   U.FREC_DIAS = { diario: 1, semanal: 7, quincenal: 15.2, mensual: 30.4, semestral: 182.6, anual: 365.2 };
   U.frec = (f) => (U.FREC_VECES[f] ? f : 'semanal');
   // convierte un monto de una frecuencia a otra (ej. $400 al mes → por día)

@@ -13,6 +13,11 @@
     App.h = nuevo;
     let velo = document.querySelector('.velo');
     let hoja = document.querySelector('.hoja');
+    if (hoja && hoja._quitar) {
+      // se estaba cerrando: se cancela y se vuelve a mostrar (si no, la hoja nueva desaparecería)
+      clearTimeout(hoja._quitar); hoja._quitar = null;
+      requestAnimationFrame(() => { if (velo) velo.classList.add('on'); hoja.classList.add('on'); });
+    }
     if (!hoja) {
       velo = document.createElement('div'); velo.className = 'velo'; velo.dataset.a = 'cerrar-hoja';
       hoja = document.createElement('div'); hoja.className = 'hoja'; hoja.setAttribute('role', 'dialog');
@@ -43,7 +48,7 @@
     App.h = null;
     const velo = document.querySelector('.velo');
     const hoja = document.querySelector('.hoja');
-    if (hoja) { hoja.classList.remove('on'); velo && velo.classList.remove('on'); setTimeout(() => { hoja.remove(); velo && velo.remove(); }, 320); }
+    if (hoja) { hoja.classList.remove('on'); velo && velo.classList.remove('on'); hoja._quitar = setTimeout(() => { hoja.remove(); velo && velo.remove(); }, 320); }
   };
 
   /* deslizar hacia abajo para cerrar */
@@ -179,14 +184,17 @@
     const out = [];
     const s = App.sobre(h.espacio, h.sobre); const st = s ? c.sob[s.id] : null;
     if (s && st && (s.tipo === 'gasto' || s.tipo === 'limite') && st.M > 0 && !s.fechaPago && !h.diferido) {
-      const rest = U.r2(st.M - st.gastadoCiclo); const desp = U.r2(rest - monto);
-      const cuando = U.FREC_ESTE[U.frec(s.frecPago)];
+      const pc = App.presupuestoCiclo(s, st);
+      const rest = U.r2(pc.M - st.gastadoCiclo); const desp = U.r2(rest - monto);
+      const cuando = U.FREC_ESTE[U.frec(s.frecPago)] + (pc.parcial ? ' (cuenta desde el ' + U.fechaCorta(s.creado) + ')' : '');
       let t;
-      if (rest < -0.004) t = '<b class="neg">Ya te pasaste ' + U.money(-rest) + '</b> de ' + U.money(st.M) + ' ' + cuando;
-      else if (monto > 0 && desp < -0.004) t = '<b class="neg">Con esto te pasas ' + U.money(-desp) + '</b> de ' + U.money(st.M) + ' ' + cuando;
-      else if (monto > 0) t = 'Te quedarán <b class="num">' + U.money(desp) + '</b> de ' + U.money(st.M) + ' ' + cuando;
-      else t = 'Te quedan <b class="num">' + U.money(rest) + '</b> de ' + U.money(st.M) + ' ' + cuando;
-      const pct = st.M > 0 ? Math.max(0, Math.min(1, (monto > 0 ? desp : rest) / st.M)) : 0;
+      if (rest < -0.004) t = '<b class="neg">Ya te pasaste ' + U.money(-rest) + '</b> de ' + U.money(pc.M) + ' ' + cuando;
+      else if (monto > 0 && desp < -0.004) t = '<b class="neg">Con esto te pasas ' + U.money(-desp) + '</b> de ' + U.money(pc.M) + ' ' + cuando;
+      else if (monto > 0) t = 'Te quedarán <b class="num">' + U.money(desp) + '</b> de ' + U.money(pc.M) + ' ' + cuando;
+      else t = 'Te quedan <b class="num">' + U.money(rest) + '</b> de ' + U.money(pc.M) + ' ' + cuando;
+      // lo que de verdad hay en el sobre (puede ser menos si aún no se aparta todo)
+      if (monto > 0 && monto > Math.max(0, st.saldo) + 0.004) t += '<small style="display:block">En el sobre hay ' + U.money(Math.max(0, st.saldo)) + '; el resto (' + U.money(monto - Math.max(0, st.saldo)) + ') sale de tu dinero libre.</small>';
+      const pct = pc.M > 0 ? Math.max(0, Math.min(1, (monto > 0 ? desp : rest) / pc.M)) : 0;
       out.push('<div class="ir-fila"><span class="ir-ico">' + U.esc(s.icono) + '</span><div class="ir-txt">' + t + '<i class="ir-barra"><i style="transform:scaleX(' + pct.toFixed(3) + ')" class="' + (pct <= 0.2 ? 'bajo' : '') + '"></i></i></div></div>');
     }
     const ct = App.cuenta(h.cuenta);
@@ -243,10 +251,27 @@
       if (h.moverModo === 'cuentas') {
         const c1 = App.cuenta(h.cuenta), c2c = App.cuenta(h.cuenta2);
         if (!c1 || !c2c || (h.cuenta === h.cuenta2 && (!c1.partes || h.sub === h.sub2))) return App.toast('Elige dos cuentas distintas', 'error');
+        if (!App.esCredito(c1) && !h.editId) {
+          const cc = App.calc(h.fecha);
+          const hay = c1.partes && cc.partes[c1.id] ? cc.partes[c1.id][h.sub === 'm' ? 'm' : 'b'] : cc.cuentas[c1.id];
+          if (monto > Math.max(0, hay) + 0.004) return App.toast(App.nombreCuenta(h.cuenta, c1.partes ? h.sub : '') + ' solo tiene ' + U.money(Math.max(0, hay)) + '. Si tienes más, primero cuadra tus cuentas.', 'error largo');
+        }
         App.addMov({ tipo: 'traspaso', monto, cuenta: h.cuenta, cuenta2: h.cuenta2, sub: c1.partes ? h.sub : '', sub2: c2c.partes ? h.sub2 : '', nota: h.nota, fecha: h.fecha });
         App.toast(App.nombreCuenta(h.cuenta, h.sub) + ' → ' + App.nombreCuenta(h.cuenta2, h.sub2) + ': ' + U.money(monto), 'ok');
       } else {
         if (h.espacio === h.espacio2 && h.deSobre === h.sobre2) return App.toast('El origen y el destino son iguales', 'error');
+        if (!h.editId) {
+          // no se puede mover más de lo que hay: si no, el dinero saldría de otro lado sin que te des cuenta
+          const cc = App.calc(h.fecha);
+          const so = h.deSobre ? App.sobre(h.espacio, h.deSobre) : null;
+          if (so && so.tipo !== 'tarjeta') {
+            const hay = Math.max(0, cc.sob[so.id].saldo);
+            if (monto > hay + 0.004) return App.toast(so.nombre + ' solo tiene ' + U.money(hay), 'error');
+          } else if (!h.deSobre) {
+            const hay = Math.max(0, cc.esp[h.espacio].libre);
+            if (monto > hay + 0.004) return App.toast('Solo tienes ' + U.money(hay) + ' libres' + (App.state.espacios.length > 1 ? ' en ' + App.espacio(h.espacio).nombre : ''), 'error');
+          }
+        }
         App.addMov({ tipo: 'mover', monto, espacio: h.espacio, sobre: h.deSobre, espacio2: h.espacio2, sobre2: h.sobre2, nota: h.nota, fecha: h.fecha });
         App.toast('Dinero movido: ' + U.money(monto), 'ok');
       }
@@ -278,7 +303,14 @@
             const t = App.sobreTarjeta(h.espacio, h.cuenta, false);
             const st = t ? c.sob[t.id] : null;
             base = 'A pagar poco a poco' + (st ? ' · ' + App.textoAporte(t, st) + (st.venc ? ' hasta el ' + U.fechaCorta(st.venc) : '') : '');
-          } else if (s) base = 'Guardado · ' + s.nombre + ': quedan ' + U.money(c.sob[s.id].saldo);
+          } else if (s) {
+            const st = c.sob[s.id];
+            if ((s.tipo === 'gasto' || s.tipo === 'limite') && !s.fechaPago && st.M > 0) {
+              // lo mismo que se ve al escribir el gasto: cuánto te queda de lo que planeaste gastar
+              const pc = App.presupuestoCiclo(s, st);
+              base = 'Guardado · ' + s.nombre + ': te quedan ' + U.money(Math.max(0, pc.M - st.gastadoCiclo)) + ' de ' + U.money(pc.M) + ' ' + U.FREC_ESTE[U.frec(s.frecPago)];
+            } else base = 'Guardado · ' + s.nombre + ': quedan ' + U.money(st.saldo) + ' en el sobre';
+          }
           else base = 'Gasto guardado · Libre: ' + U.money(c.esp[h.espacio].libre);
           // alertas: te pasaste o te queda poco (en el sobre y en la tarjeta)
           const als = [s && !diferido ? App.alertaSobre(s, c.sob[s.id]) : null, App.alertaTarjeta(cta, c)].filter(Boolean);
@@ -295,6 +327,12 @@
           sonido = 'ingreso';
         }
       }
+    }
+    // si una cuenta normal quedó en negativo, lo más seguro es que falte registrar algo
+    if (h.modo === 'gasto' && !h.editId) {
+      const ct = App.cuenta(h.cuenta); const cc = App.calc();
+      const v = ct && !App.esCredito(ct) ? (ct.partes && cc.partes[ct.id] ? cc.partes[ct.id][h.sub === 'm' ? 'm' : 'b'] : cc.cuentas[ct.id]) : 0;
+      if (v < -0.004) setTimeout(() => App.toast(App.nombreCuenta(ct.id, ct.partes ? h.sub : '') + ' quedó en ' + U.money(v) + '. Si no es correcto, cuadra tus cuentas (botón Cuadrar en Inicio).', 'aviso largo'), 2900);
     }
     if (sonido) U.sonido(sonido);
     U.haptic(sonido === 'alerta' ? 'alerta' : '');

@@ -110,7 +110,8 @@
   App.cicloSobre = (s, ref) => {
     const fP = U.frec(s.frecPago);
     if (s.fechaPago) {
-      const k = U.vencIndice(fP, s.fechaPago, ref);
+      // el primer pago es la fecha que pusiste: no hay pagos antes de ella
+      const k = Math.max(U.vencIndice(fP, s.fechaPago, ref), U.vencIndice(fP, s.fechaPago, s.fechaPago));
       const venc = U.venc(fP, s.fechaPago, k);
       return { ini: U.addDays(U.venc(fP, s.fechaPago, k - 1), 1), fin: U.addDays(venc, 1), venc };
     }
@@ -137,13 +138,17 @@
       o.constante = U.convertir(M, fP, fA);
       // un sobre nuevo (sin fecha de pago) solo necesita la parte que queda de su primer periodo
       const prorrateo = (ini, fin) => (!s.fechaPago && s.creado && s.creado > ini && s.creado < fin ? U.daysBetween(s.creado, fin) / U.daysBetween(ini, fin) : 1);
+      // presupuesto de este ciclo: completo, salvo el primero si el sobre se creó a la mitad
+      o.Mc = U.r2(M * prorrateo(ciclo.ini, ciclo.fin));
       if (manual !== null) {
         o.cuota = manual; o.ventana = P; o.T = M;
       } else if (U.FREC_DIAS[fA] >= U.FREC_DIAS[fP] - 0.01) {
         // cada aporte cubre uno o varios pagos completos
         let k = 0;
         if (s.fechaPago) {
-          let i = U.vencIndice(fP, s.fechaPago, P.ini);
+          // solo pagos desde la fecha que pusiste (y desde que existe el sobre): los de antes ya no tocan
+          const inicio = [P.ini, s.fechaPago, s.creado || ''].sort().pop();
+          let i = U.vencIndice(fP, s.fechaPago, inicio);
           while (U.venc(fP, s.fechaPago, i) < P.fin && k < 400) { k++; i++; }
         } else {
           // gastos sin fecha: se aparta por adelantado cada periodo que empieza dentro de este aporte
@@ -151,7 +156,8 @@
           if (d.ini < P.ini) d = U.periodo(fP, d.fin);
           for (let g = 0; g < 400 && d.ini < P.fin; g++) { k++; d = U.periodo(fP, d.fin); }
         }
-        let T = M * Math.max(1, k) * prorrateo(P.ini, P.fin);
+        // con fecha: solo los pagos que caen en este periodo (si no cae ninguno, no se aparta para no juntar doble)
+        let T = M * (s.fechaPago ? k : Math.max(1, k)) * prorrateo(P.ini, P.fin);
         if (s.tipo === 'limite') T = Math.max(0, T - Math.max(0, saldoAntesDe(L, P.ini)));
         o.T = T; o.cuota = c2(T); o.ventana = P;
       } else {
@@ -223,11 +229,79 @@
     return o;
   };
 
+  /* ---------- Lo que un sobre necesita de aquí a tu próximo cobro ----------
+     El dinero que entra hoy tiene que alcanzar hasta que vuelvas a cobrar: se aparta lo que falta de
+     este periodo y lo de los periodos que empiecen antes de tu siguiente cobro. Así no importa
+     qué día de la semana o del mes cobres, ni cada cuánto apartes en cada sobre. */
+  App.finHorizonte = (fecha) => {
+    const f = U.frec(App.state.ajustes.frecIngreso);
+    if (f === 'diario') return U.addDays(fecha, 1);
+    if (f === 'semanal') return U.addDays(fecha, 7);
+    const ultimoDelMes = U.addDays(fecha, 1).slice(8) === '01';
+    if (f === 'quincenal') {
+      // la quincena se cobra el 15 y el último día del mes
+      const dia = Number(fecha.slice(8));
+      if (dia < 15) return fecha.slice(0, 8) + '15';
+      if (!ultimoDelMes) return U.addDays(U.addMonths(fecha.slice(0, 8) + '01', 1), -1);
+      return U.addDays(fecha, 15);
+    }
+    const meses = { mensual: 1, semestral: 6, anual: 12 }[f];
+    // si cobras el último día del mes, el siguiente cobro también es el último día
+    if (ultimoDelMes) return U.addDays(U.addMonths(U.addDays(fecha, 1), meses), -1);
+    return U.addMonths(fecha, meses);
+  };
+  // Devuelve { total, por: [[fecha del periodo, monto], ...] }
+  App.necesidad = (s, L, fecha, fin) => {
+    const r = { total: 0, por: [] };
+    if (s.tipo === 'porIngreso') return r;
+    L = L || { ev: [], sal: [] };
+    fin = fin || App.finHorizonte(fecha);
+    const fA = U.frec(s.frecAporte || App.state.ajustes.frecIngreso);
+    const Lv = { ev: L.ev.slice(), sal: L.sal.slice() };
+    let saldo = saldoFinal(L), ref = fecha;
+    for (let g = 0; g < 400; g++) {
+      const p = App.planSobre(s, Lv, ref);
+      const x = U.r2(Math.max(0, p.falta));
+      if (x > 0) { r.total += x; r.por.push([ref, x]); Lv.ev.push({ f: ref, ap: x }); saldo += x; }
+      const sig = U.periodo(fA, ref).fin;
+      if (sig >= fin) break;
+      // al empezar el siguiente periodo: de un "gasto con tope" solo queda lo que no le toca gastar en este
+      if (s.tipo === 'limite') {
+        const queda = p.Mc !== undefined ? Math.max(0, p.Mc - p.gastadoCiclo) : 0;
+        saldo = Math.max(0, saldo - queda);
+      }
+      Lv.sal.push([U.addDays(sig, -1), saldo]);
+      ref = sig;
+    }
+    r.total = U.r2(r.total);
+    return r;
+  };
+  // reparte un monto entre las partes de una necesidad (primero lo más cercano); lo que sobre cuenta para hoy
+  App.porDe = (por, monto, hoy) => {
+    const out = []; let resta = U.r2(monto);
+    por.forEach(([f, x]) => { const v = U.r2(Math.min(x, resta)); if (v > 0) { out.push([f, v]); resta = U.r2(resta - v); } });
+    if (resta > 0) { if (out.length && out[0][0] === hoy) out[0][1] = U.r2(out[0][1] + resta); else out.unshift([hoy, resta]); }
+    return out.length > 1 || (out.length === 1 && out[0][0] !== hoy) ? out : null;
+  };
+  App.porValido = (m, v) => {
+    if (!Array.isArray(m.por) || !m.por.length) return null;
+    const t = m.por.reduce((a, p) => a + (Number(p[1]) || 0), 0);
+    return Math.abs(t - v) < 0.02 ? m.por : null;
+  };
+
+  /* "Por cada ingreso": una cantidad fija o un porcentaje de lo que entra */
+  App.montoPorIngreso = (s, ingreso) => (Number(s.pct) > 0 ? U.r2((Number(ingreso) || 0) * Number(s.pct) / 100) : Number(s.cuota) || 0);
+  App.txtPorIngreso = (s) => (Number(s.pct) > 0 ? s.pct + '% de cada ingreso' : U.money0(s.cuota) + ' por cada ingreso');
+
   /* Texto corto del aporte: "$13.15 cada día" */
   App.textoAporte = (s, st) => {
-    if (s.tipo === 'porIngreso') return U.money(s.cuota) + ' por cada ingreso';
+    if (s.tipo === 'porIngreso') return App.txtPorIngreso(s);
     const f = st ? st.frecAporte : U.frec(s.frecAporte || App.state.ajustes.frecIngreso);
     const v = st ? (s.tipo === 'gasto' || s.tipo === 'limite' ? (App.esManual(s) ? st.cuota : st.constante) : st.cuota) : 0;
+    // si en este periodo se aparta distinto de lo normal (primer pago cerca, semana empezada), se dice
+    if (st && (s.tipo === 'gasto' || s.tipo === 'limite') && !App.esManual(s) && st.falta > 0 && Math.abs(st.cuota - st.constante) > 0.5) {
+      return U.money(st.cuota) + ' ' + U.FREC_CADA[f] + ' por ahora (lo normal: ' + U.money(v) + ')';
+    }
     return U.money(v) + ' ' + U.FREC_CADA[f];
   };
 
@@ -262,7 +336,11 @@
       ingreso(m) { if (fase === 'semana' && espSemana[m.espacio]) espSemana[m.espacio].ingresado += Number(m.monto); },
       apartado(sobreId, m, v) {
         if (fase === 'semana' && st[sobreId]) st[sobreId].apartadoSemana += v;
-        if (L[sobreId]) L[sobreId].ev.push({ f: m.fecha, ap: v });
+        if (!L[sobreId]) return;
+        // un reparto puede adelantar dinero de periodos siguientes: cada parte cuenta para su periodo
+        const por = App.porValido(m, v);
+        if (por) por.forEach((p) => L[sobreId].ev.push({ f: p[0], ap: p[1] }));
+        else L[sobreId].ev.push({ f: m.fecha, ap: v });
       },
       dif(sobreId, m, v) { if (L[sobreId]) L[sobreId].ev.push({ f: m.fecha, dif: v, meses: m.meses || 1 }); },
       saldo(sobreId, f, v) {
@@ -291,10 +369,10 @@
         if (s.tipo === 'gasto' || s.tipo === 'limite') {
           if (s.fechaPago) {
             progreso = p.M > 0 ? (Math.max(0, saldo) + p.gastadoCiclo) / p.M : 0;
-            estado = p.M > 0 && p.gastadoCiclo > p.M * 1.001 ? 'pasado' : p.falta > 0 ? 'cuidado' : 'ok';
+            estado = p.M > 0 && p.gastadoCiclo > p.M + 0.005 ? 'pasado' : p.falta > 0 ? 'cuidado' : 'ok';
           } else {
-            progreso = p.M > 0 ? p.gastadoCiclo / p.M : (p.gastadoCiclo > 0 ? 1.01 : 0);
-            estado = progreso > 1.001 ? 'pasado' : progreso >= 0.8 ? 'cuidado' : 'ok';
+            progreso = p.Mc > 0 ? p.gastadoCiclo / p.Mc : (p.gastadoCiclo > 0 ? 1.01 : 0);
+            estado = p.gastadoCiclo > p.Mc + 0.005 ? 'pasado' : progreso >= 0.8 ? 'cuidado' : 'ok';
             presupuesto += U.convertir(p.M, s.frecPago, 'semanal');
           }
         } else if (s.tipo === 'deuda') {
@@ -400,7 +478,7 @@
     S.espacios.forEach((e) => e.sobres.forEach((s) => {
       const x = c.sob[s.id];
       if ((s.tipo === 'gasto' || s.tipo === 'limite') && (x.gastadoSemana > 0 || x.M > 0)) {
-        const planeado = !s.fechaPago && U.frec(s.frecPago) === 'semanal' ? x.M : 0;
+        const planeado = !s.fechaPago && U.frec(s.frecPago) === 'semanal' ? x.Mc : 0;
         sobres.push({ s, e, x, planeado });
       }
     }));
@@ -498,39 +576,72 @@
   };
 
   /* Propuesta para acomodar el dinero de un espacio en sus sobres (al empezar) */
+  /* Presupuesto de este ciclo en palabras: "$250 esta semana" (o la parte que queda si el sobre es nuevo) */
+  App.presupuestoCiclo = (s, st) => {
+    const fP = U.frec(s.frecPago);
+    const M = s.fechaPago ? st.M : (st.Mc !== undefined ? st.Mc : st.M);
+    const parcial = !s.fechaPago && st.Mc !== undefined && st.Mc < st.M - 0.005;
+    return { M, parcial, txt: U.money(M) + ' ' + U.FREC_ESTE[fP] + (parcial ? ' (cuenta desde el ' + U.fechaCorta(s.creado) + ')' : '') };
+  };
+
+  /* Cuándo vuelves a cobrar, en palabras */
+  App.textoCobro = (fin, hoy) => {
+    hoy = hoy || U.today();
+    const d = U.daysBetween(hoy, fin);
+    return d <= 1 ? 'mañana' : d < 7 ? 'el ' + U.DIAS[U.dow(fin)] : 'el ' + U.fechaCorta(fin);
+  };
+
+  /* Propuesta para acomodar el dinero que ya tienes: lo que cada sobre necesita hasta tu próximo cobro */
   App.propuestaAcomodo = (espId, c) => {
     const e = App.espacio(espId); if (!e) return [];
     c = c || App.calc();
     const hoy = U.today();
+    const fin = App.finHorizonte(hoy);
     const lista = [];
     e.sobres.forEach((s, i) => {
       const st = c.sob[s.id]; if (!st || s.tipo === 'porIngreso') return;
-      let necesita = st.falta, motivo = '';
+      const n = App.necesidad(s, c.L[s.id], hoy, fin);
+      let necesita = n.total; const partes = [];
+      const fA = st.frecAporte;
       if (s.tipo === 'gasto' || s.tipo === 'limite') {
+        const fP = U.frec(s.frecPago);
         if (s.fechaPago) {
+          // si el pago está cerca, propone también lo que ya debería llevar juntado
           const dias = U.daysBetween(st.cIni, st.venc) + 1;
-          const llevan = U.daysBetween(st.cIni, hoy) + 1;
-          necesita = Math.max(st.falta, st.M * llevan / dias - st.saldo);
-          motivo = 'Pago de ' + U.money0(st.M) + ' el ' + U.fechaCorta(st.venc);
+          const llevan = U.clamp(U.daysBetween(st.cIni, hoy) + 1, 1, dias);
+          necesita = Math.max(necesita, st.M * llevan / dias - Math.max(0, st.saldo));
+          partes.push('Pago de ' + U.money0(st.M) + ' el ' + U.fechaCorta(st.venc));
+          if (st.saldo > 0.5) partes.push('llevas ' + U.money0(st.saldo));
         } else {
-          necesita = Math.max(st.falta, st.T - st.cubierto);
-          motivo = 'Para gastar ' + U.FREC_ESTE[U.frec(s.frecPago)];
+          const base = (s.tipo === 'limite' ? 'Tope de ' : '') + U.money0(st.M) + ' ' + U.FREC_CADA[fP];
+          const p = App.presupuestoCiclo(s, st);
+          if (fA === 'diario' && fP !== 'diario') partes.push(base + ' (' + U.money(st.constante) + ' al día)');
+          else {
+            partes.push(base);
+            if (p.parcial) {
+              const quedan = U.daysBetween(hoy, st.cFin) + 1;
+              partes.push(U.FREC_ESTE[fP] + ' ya va empezada (' + (quedan === 1 ? 'queda 1 día' : 'quedan ' + quedan + ' días') + '): ' + U.money0(st.Mc));
+            }
+            if (fA !== fP) partes.push('se apartan ' + U.money(st.constante) + ' ' + U.FREC_CADA[fA]);
+          }
         }
       } else if (s.tipo === 'deuda' && s.hasta && s.meta > 0) {
         const desde = s.desde || hoy;
         const dias = Math.max(1, U.daysBetween(desde, s.hasta) + 1);
         const llevan = U.clamp(U.daysBetween(desde, hoy) + 1, 1, dias);
-        necesita = Math.max(st.falta, s.meta * llevan / dias - st.pagado - Math.max(0, st.saldo));
-        motivo = 'Debes ' + U.money0(s.meta - st.pagado) + ' para el ' + U.fechaCorta(s.hasta);
+        necesita = Math.max(necesita, s.meta * llevan / dias - st.pagado - Math.max(0, st.saldo));
+        partes.push('Debes ' + U.money0(s.meta - st.pagado) + ' para el ' + U.fechaCorta(s.hasta));
       } else if (s.tipo === 'tarjeta') {
-        motivo = st.venc ? 'Pago de tarjeta el ' + U.fechaCorta(st.venc) : 'Pago de tarjeta';
+        partes.push(st.venc ? 'Pago de tarjeta el ' + U.fechaCorta(st.venc) : 'Pago de tarjeta');
       } else if (s.tipo === 'ahorro') {
-        motivo = 'Ahorro de ' + U.FREC_ESTE[st.frecAporte];
+        const m = s.meta > 0 && s.hasta ? App.calcMeta(s.meta, st.saldo, s.hasta, fA) : null;
+        if (m) partes.push('Meta ' + U.money0(s.meta) + ' para el ' + U.fechaCorta(s.hasta) + ' · ' + U.money(m.diario) + ' al día');
+        else partes.push('Ahorras ' + U.money(st.cuota) + ' ' + U.FREC_CADA[fA]);
       }
       necesita = Math.ceil(Math.max(0, necesita) - 0.001);
       if (s.tipo === 'ahorro' && s.meta > 0) necesita = Math.min(necesita, Math.max(0, Math.ceil(s.meta - st.saldo)));
       const urge = s.tipo === 'deuda' || s.tipo === 'tarjeta' || !!s.fechaPago;
-      lista.push({ s, i, necesita, motivo, urge, venc: st.venc || '9999' });
+      lista.push({ s, i, necesita, motivo: partes.join(' · '), urge, venc: st.venc || '9999', por: n.por });
     });
     lista.sort((a, b) => (a.urge === b.urge ? 0 : a.urge ? -1 : 1) || (a.urge ? a.venc.localeCompare(b.venc) : 0) || a.i - b.i);
     return lista;
@@ -575,14 +686,15 @@
     const a = App.state.ajustes;
     if (a.alertas === false || !s || !st || !(s.tipo === 'gasto' || s.tipo === 'limite')) return null;
     const u = App.umbral(s.alerta, a.alertaSobre);
-    if (u === null || !(st.M > 0)) return null;
-    const restante = U.r2(st.M - st.gastadoCiclo);
-    const pct = restante / st.M * 100;
+    const M = s.fechaPago ? st.M : st.Mc;
+    if (u === null || !(M > 0)) return null;
+    const restante = U.r2(M - st.gastadoCiclo);
+    const pct = restante / M * 100;
     const cuando = U.FREC_ESTE[U.frec(s.frecPago)];
-    if (restante < -0.004) return { nivel: 'pasado', restante, pct, texto: s.nombre + ': te pasaste ' + U.money(-restante) + ' ' + cuando, corto: 'Te pasaste ' + U.money(-restante) + ' de ' + U.money(st.M) + ' ' + cuando };
+    if (restante < -0.004) return { nivel: 'pasado', restante, pct, texto: s.nombre + ': te pasaste ' + U.money(-restante) + ' ' + cuando, corto: 'Te pasaste ' + U.money(-restante) + ' de ' + U.money(M) + ' ' + cuando };
     // los pagos con fecha (renta, gym) solo avisan si te pasas: al pagarlos se usa el 100%
     if (s.fechaPago || !(u > 0) || pct > u + 1e-9) return null;
-    return { nivel: 'poco', restante, pct, texto: s.nombre + ': te queda' + (restante === 1 ? '' : 'n') + ' ' + U.money(restante) + ' (' + Math.round(pct) + '%) ' + cuando, corto: 'Te queda ' + U.money(restante) + ' de ' + U.money(st.M) + ' ' + cuando + ' (' + Math.round(pct) + '%)' };
+    return { nivel: 'poco', restante, pct, texto: s.nombre + ': te queda' + (restante === 1 ? '' : 'n') + ' ' + U.money(restante) + ' (' + Math.round(pct) + '%) ' + cuando, corto: 'Te queda ' + U.money(restante) + ' de ' + U.money(M) + ' ' + cuando + ' (' + Math.round(pct) + '%)' };
   };
 
   // Hasta dónde quieres usar la tarjeta: tu límite de uso (si lo pusiste) o el del banco

@@ -25,7 +25,8 @@
   const descSobre = (s, st) => {
     if (s.tipo === 'gasto' || s.tipo === 'limite') {
       if (s.fechaPago) return 'Pago de ' + U.money0(st.M) + ' el ' + U.fechaCorta(st.venc) + ' · llevas ' + U.money0(Math.max(0, st.saldo)) + faltaTxt(st);
-      return 'Gastado ' + U.money0(st.gastadoCiclo) + ' de ' + U.money0(st.M) + ' ' + U.FREC_ESTE[U.frec(s.frecPago)] + (st.falta > 0 ? ' · faltan ' + U.money0(st.falta) : '');
+      const pc = App.presupuestoCiclo(s, st);
+      return 'Gastado ' + U.money0(st.gastadoCiclo) + ' de ' + U.money0(pc.M) + ' ' + U.FREC_ESTE[U.frec(s.frecPago)] + (pc.parcial ? ' (empezó el ' + U.fechaCorta(s.creado) + ')' : '') + (st.falta > 0 ? ' · por apartar ' + U.money0(st.falta) : '');
     }
     if (s.tipo === 'deuda') return 'Aporte ' + U.money0(st.cuota) + U.FREC_POR[st.frecAporte] + (st.falta > 0 ? ' · faltan ' + U.money0(st.falta) : ' · cubierto ✓');
     if (s.tipo === 'ahorro') {
@@ -34,7 +35,7 @@
       return (s.meta > 0 ? 'Meta ' + U.money0(s.meta) + ' · ' : '') + U.money0(st.cuota) + U.FREC_POR[st.frecAporte] + faltaTxt(st);
     }
     if (s.tipo === 'tarjeta') return st.saldo < -0.004 ? 'Falta juntar ' + U.money0(-st.saldo) + (st.venc ? ' · pago ' + U.fechaCorta(st.venc) : '') + (st.falta > 0 ? ' · hoy ' + U.money0(st.falta) : '') : 'Al corriente ✓';
-    return U.money0(s.cuota) + ' por cada ingreso' + (s.meta > 0 ? ' · meta ' + U.money0(s.meta) : '');
+    return App.txtPorIngreso(s) + (s.meta > 0 ? ' · meta ' + U.money0(s.meta) : '');
   };
   App.descSobre = descSobre;
 
@@ -42,7 +43,7 @@
   const resumenSobre = (s) => {
     const fA = U.frec(s.frecAporte || App.state.ajustes.frecIngreso);
     if (s.tipo === 'deuda') return 'Pago único · ' + U.money0(s.meta) + (s.hasta ? ' para el ' + U.fechaCorta(s.hasta) : '');
-    if (s.tipo === 'porIngreso') return U.money0(s.cuota) + ' por ingreso';
+    if (s.tipo === 'porIngreso') return App.txtPorIngreso(s);
     if (s.tipo === 'ahorro') return 'Ahorro · ' + (s.meta > 0 && s.hasta ? 'meta ' + U.money0(s.meta) + ' para el ' + U.fechaCorta(s.hasta) : U.money0(s.cuota) + ' ' + U.FREC_CADA[fA]);
     if (s.tipo === 'tarjeta') return 'Pago de tarjeta · aporte ' + U.FREC_CADA[fA];
     return (s.tipo === 'limite' ? 'Tope ' : '') + U.money0(s.cuota) + ' ' + U.FREC_CADA[U.frec(s.frecPago)] + (s.fechaPago ? ' · paga el ' + U.fechaCorta(U.siguienteVenc(s.frecPago, s.fechaPago, U.today())) : '');
@@ -68,7 +69,8 @@
       let t = 'Se apartan <b>≈ ' + U.money(p.constante) + '</b> ' + cada + '.';
       if (s.fechaPago) {
         const lleva = h.id && c.sob[h.id] ? Math.max(0, c.sob[h.id].saldo) : 0;
-        t += '<small>Próximo pago: ' + U.fechaLarga(p.venc) + '. Llevas ' + U.money(lleva) + ' de ' + U.money(s.cuota) + '.' + (p.falta > 0 ? ' Por ahora faltan ' + U.money(p.falta) + '.' : '') + '</small>';
+        const ahora = Math.abs(p.cuota - p.constante) > 0.5 ? ' Para llegar a este pago, esta vez se apartan ' + U.money(p.cuota) + ' ' + cada + '.' : '';
+        t += '<small>Próximo pago: ' + U.fechaLarga(p.venc) + '. Llevas ' + U.money(lleva) + ' de ' + U.money(s.cuota) + '.' + ahora + '</small>';
       } else if (Math.abs(p.cuota - p.constante) > 0.5 && p.falta > 0) t += '<small>Esta vez: ' + U.money(p.falta) + ', por lo que queda ' + U.FREC_ESTE[s.frecPago] + '.</small>';
       return t;
     }
@@ -234,6 +236,7 @@
       if (b.cuota === 0 && !s) b.cuota = '';
       // ahorro con meta y fecha: lo pide al crear una meta desde Metas
       b.conMeta = s ? (s.tipo === 'ahorro' && s.meta > 0 && !!s.hasta) : d.conMeta === '1';
+      b.porPct = Number(b.pct) > 0; b.pct = b.pct ? String(b.pct) : '';
       if (b.conMeta && !s) { b.meta = ''; b.hasta = ''; b.icono = '🎯'; }
       return Object.assign(b, { esp: d.esp || (App.espacioPrincipal() || {}).id, id: d.id || '' });
     },
@@ -251,12 +254,17 @@
         y += '<p class="nota">' + App.TIPOS_SOBRE[h.tipo].desc + '</p>';
       }
       if (esGasto) {
-        y += '<div class="etq">¿Cuánto y cada cuánto lo pagas o gastas?</div>';
-        y += '<label class="campo" style="margin-top:0"><span>' + (h.tipo === 'limite' ? 'Tope' : 'Monto') + '</span><input inputmode="decimal" data-m="cuota" value="' + U.esc(h.cuota) + '" placeholder="$0"></label>';
+        y += '<div class="etq">' + (h.tipo === 'limite' ? '¿Cuánto puedes gastar y cada cuánto?' : h.fechaPago ? '¿Cuánto pagas y cada cuánto?' : '¿Cuánto gastas y cada cuánto?') + '</div>';
+        y += '<label class="campo" style="margin-top:0"><span>' + (h.tipo === 'limite' ? 'Tope' : h.fechaPago ? 'Monto del pago' : 'Monto') + '</span><input inputmode="decimal" data-m="cuota" value="' + U.esc(h.cuota) + '" placeholder="$0"></label>';
         y += App.tabsFrec('se-frec-pago', U.frec(h.frecPago));
-        y += '<div class="dos"><label class="campo"><span>Fecha de pago (opcional)</span><input type="date" data-m="fechaPago" data-render="1" value="' + U.esc(h.fechaPago || '') + '"></label>' +
-          (h.fechaPago ? '<label class="campo"><span>Avisarme</span><select data-m="avisar">' + [0, 1, 2, 3, 5, 7].map((n) => '<option value="' + n + '" ' + (String(h.avisar) === String(n) ? 'selected' : '') + '>' + (n === 0 ? 'El mismo día' : n + (n === 1 ? ' día antes' : ' días antes')) + '</option>').join('') + '</select></label>' : '<div></div>') + '</div>';
-        y += '<p class="nota">' + (h.fechaPago ? 'Se repite ' + U.FREC_CADA[U.frec(h.frecPago)] + ' desde esa fecha. Te aviso antes y se aparta poco a poco para que llegues completo.' : 'Sin fecha: es lo que planeas gastar ' + U.FREC_CADA[U.frec(h.frecPago)] + '. Ponle fecha si es un pago (renta, colegiatura, gym).') + '</p>';
+        if (h.tipo === 'limite') {
+          // un tope es un máximo para gastar, no un pago con fecha
+          y += '<p class="nota">Puedes gastar hasta ' + (num(h.cuota) > 0 ? U.money0(num(h.cuota)) : 'el tope') + ' ' + U.FREC_CADA[U.frec(h.frecPago)] + '. Te aviso si te acercas o te pasas.</p>';
+        } else {
+          y += '<div class="dos"><label class="campo"><span>Fecha de pago (opcional)</span><input type="date" data-m="fechaPago" data-render="1" value="' + U.esc(h.fechaPago || '') + '"></label>' +
+            (h.fechaPago ? '<label class="campo"><span>Avisarme</span><select data-m="avisar">' + [0, 1, 2, 3, 5, 7].map((n) => '<option value="' + n + '" ' + (String(h.avisar) === String(n) ? 'selected' : '') + '>' + (n === 0 ? 'El mismo día' : n + (n === 1 ? ' día antes' : ' días antes')) + '</option>').join('') + '</select></label>' : '<div></div>') + '</div>';
+          y += '<p class="nota">' + (h.fechaPago ? 'Se repite ' + U.FREC_CADA[U.frec(h.frecPago)] + ' desde esa fecha. Te aviso antes y se aparta poco a poco para que llegues completo.' : 'Sin fecha: es lo que planeas gastar ' + U.FREC_CADA[U.frec(h.frecPago)] + '. Ponle fecha si es un pago (renta, colegiatura, gym).') + '</p>';
+        }
       } else if (h.tipo === 'ahorro') {
         y += '<div class="seg" style="margin-top:14px">' + [['1', '🎯 Meta con fecha'], ['0', '💵 Cantidad fija']].map(([v, t]) => '<button class="' + ((h.conMeta ? '1' : '0') === v ? 'on' : '') + '" data-a="se-conmeta" data-v="' + v + '">' + t + '</button>').join('') + '</div>';
         if (h.conMeta) {
@@ -278,7 +286,10 @@
         y += '<label class="campo"><span>Total a juntar</span><input inputmode="decimal" data-m="meta" value="' + U.esc(h.meta || '') + '" placeholder="$0"></label>';
         y += '<div class="dos"><label class="campo"><span>Desde</span><input type="date" data-m="desde" data-render="1" value="' + U.esc(h.desde || U.today()) + '"></label><label class="campo"><span>Fecha límite</span><input type="date" data-m="hasta" data-render="1" value="' + U.esc(h.hasta || '') + '"></label></div>';
       } else if (h.tipo === 'porIngreso') {
-        y += '<label class="campo"><span>Cantidad por cada ingreso</span><input inputmode="decimal" data-m="cuota" value="' + U.esc(h.cuota) + '" placeholder="$0"></label>';
+        const pct = !!h.porPct;
+        y += '<div class="seg" style="margin-top:14px"><button class="' + (!pct ? 'on' : '') + '" data-a="se-porpct" data-v="0">💵 Cantidad fija</button><button class="' + (pct ? 'on' : '') + '" data-a="se-porpct" data-v="1">％ Porcentaje</button></div>';
+        if (pct) y += '<label class="campo"><span>¿Qué porcentaje de cada ingreso?</span><input inputmode="decimal" data-m="pct" value="' + U.esc(h.pct || '') + '" placeholder="Ej. 10"><small>Ej. con 10%, si registras un ingreso de $1,000 se apartan $100.</small></label>';
+        else y += '<label class="campo"><span>¿Cuánto apartar cada vez que entra dinero?</span><input inputmode="decimal" data-m="cuota" value="' + U.esc(h.cuota) + '" placeholder="$0"><small>Se aparta esa cantidad con cada ingreso que registres en este espacio.</small></label>';
         y += '<label class="campo"><span>Meta (opcional)</span><input inputmode="decimal" data-m="meta" value="' + U.esc(h.meta || '') + '" placeholder="Ej. 10000"><small>Aparece en Metas con su barra de progreso.</small></label>';
       }
       if (esGasto || h.tipo === 'deuda' || h.tipo === 'tarjeta') {
@@ -363,9 +374,19 @@
   /* ---------- Cada cuánto recibes dinero ---------- */
   H['frec-ingreso'] = {
     titulo: 'Cada cuánto recibes dinero',
-    render: () => '<p class="nota" style="margin-top:0">Se usa como aporte de los sobres nuevos y para juntar poco a poco lo de tu tarjeta de crédito.</p>' +
-      App.tabsFrec('frec-ingreso', App.state.ajustes.frecIngreso, '', ['diario', 'semanal', 'quincenal', 'mensual']) +
-      '<p class="nota">No cambia los sobres que ya tienes. Cada uno tiene su propio aporte en Espacios y sobres.</p>'
+    render: () => {
+      const f = App.state.ajustes.frecIngreso;
+      let y = '<p class="nota" style="margin-top:0">Cada vez que registras un ingreso, se aparta lo que tus sobres necesitan hasta tu siguiente cobro. También es el aporte de los sobres nuevos y de lo que juntas para tu tarjeta.</p>' +
+        App.tabsFrec('frec-ingreso', f, '', ['diario', 'semanal', 'quincenal', 'mensual']);
+      // sobres que apartan con otro ritmo distinto a cuando cobras
+      const otros = [];
+      App.state.espacios.forEach((e) => e.sobres.forEach((s) => { if (s.tipo !== 'tarjeta' && s.tipo !== 'porIngreso' && U.frec(s.frecAporte || f) !== f) otros.push(s); }));
+      if (otros.length) {
+        y += '<p class="nota">' + otros.length + (otros.length === 1 ? ' sobre aparta' : ' sobres apartan') + ' con otro ritmo (' + otros.slice(0, 4).map((s) => U.esc(s.nombre) + ': ' + U.FREC_TXT[U.frec(s.frecAporte)].toLowerCase()).join(', ') + (otros.length > 4 ? '…' : '') + '). Lo más fácil es que todos aparten igual que como cobras.</p>';
+        y += '<button class="btn sec" data-a="aporte-todos">Que todos aparten ' + U.FREC_CADA[f] + '</button>';
+      } else y += '<p class="nota">Todos tus sobres apartan ' + U.FREC_CADA[f] + ' ✓</p>';
+      return y;
+    }
   };
 
   /* ---------- Pagos recurrentes ---------- */

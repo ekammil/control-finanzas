@@ -273,6 +273,7 @@
       if (!h.conMeta) h.hasta = '';
       App.renderHoja();
     },
+    'se-porpct': (el) => { App.h.porPct = el.dataset.v === '1'; App.renderHoja(); },
     'se-plazo': (el) => { App.h.hasta = U.addMonths(U.today(), Number(el.dataset.v)); App.renderHoja(); },
     'se-frec-pago': (el) => { App.h.frecPago = el.dataset.v; App.renderHoja(); },
     'se-frec-aporte': (el) => {
@@ -280,6 +281,19 @@
       if (h.tipo === 'ahorro' && !h.conMeta && num(h.cuota) > 0) h.cuota = String(U.r2(U.convertir(num(h.cuota), antes, el.dataset.v)));
       if (h.manual && num(h.aporteManual) > 0) h.aporteManual = String(U.r2(U.convertir(num(h.aporteManual), antes, el.dataset.v)));
       h.frecAporte = el.dataset.v; App.renderHoja();
+    },
+    'aviso-ritmo-no': () => { App.state.ajustes.avisoRitmo = true; App.save(); refrescar(); },
+    'aporte-todos': () => {
+      const f = App.state.ajustes.frecIngreso; let n = 0;
+      App.state.espacios.forEach((e) => e.sobres.forEach((s) => {
+        if (s.tipo === 'tarjeta' || s.tipo === 'porIngreso') return;
+        const antes = U.frec(s.frecAporte || f); if (antes === f) return;
+        // las cantidades fijas se convierten para que sigan siendo lo mismo (ej. $100 a la semana = $14.29 al día)
+        if (s.tipo === 'ahorro' && !(s.meta > 0 && s.hasta) && s.cuota > 0) s.cuota = U.r2(U.convertir(s.cuota, antes, f));
+        if (App.esManual(s)) s.aporteManual = U.r2(U.convertir(parseFloat(s.aporteManual), antes, f));
+        s.frecAporte = f; n++;
+      }));
+      App.save(); U.haptic(); App.toast(n + (n === 1 ? ' sobre ahora aparta ' : ' sobres ahora apartan ') + U.FREC_CADA[f], 'ok'); App.renderHoja(); refrescar();
     },
     'frec-ingreso': (el) => { App.state.ajustes.frecIngreso = el.dataset.v; App.save(); App.renderHoja(); refrescar(); },
     'cuenta-tipo': (el) => { const h = App.h; h.tipo = el.dataset.v; if (h.tipo === 'credito' && (h.icono === '🏦' || !h.icono)) h.icono = '💳'; if (h.tipo === 'normal' && h.icono === '💳') h.icono = '🏦'; App.renderHoja(); },
@@ -293,10 +307,12 @@
         desde: h.tipo === 'deuda' ? (h.desde || U.today()) : '', hasta: h.tipo === 'deuda' || (h.tipo === 'ahorro' && h.conMeta) ? (h.hasta || '') : '',
         sobranteA: h.tipo === 'limite' ? (h.sobranteA || '') : '', disponible: h.tipo !== 'tarjeta' && !!h.disponible,
         frecPago: U.frec(h.frecPago), frecAporte: h.tipo === 'tarjeta' ? (h.frecAporte || '') : U.frec(h.frecAporte || App.state.ajustes.frecIngreso),
-        fechaPago: esGasto ? (h.fechaPago || '') : '', avisar: Number(h.avisar) || 0,
+        fechaPago: h.tipo === 'gasto' ? (h.fechaPago || '') : '', avisar: Number(h.avisar) || 0,
         aporteManual: (esGasto || h.tipo === 'deuda') && h.manual ? num(h.aporteManual) : '',
-        alerta: esGasto ? (h.alerta || '') : ''
+        alerta: esGasto ? (h.alerta || '') : '',
+        pct: h.tipo === 'porIngreso' && h.porPct ? Math.min(100, num(h.pct)) : 0
       };
+      if (h.tipo === 'porIngreso' && !(datos.pct > 0) && !(datos.cuota > 0)) return App.toast(h.porPct ? 'Escribe el porcentaje' : 'Escribe la cantidad', 'error');
       if (h.tipo === 'deuda' && (!(datos.meta > 0) || !datos.hasta)) return App.toast('Pon el total y la fecha límite', 'error');
       if (h.tipo === 'ahorro' && h.conMeta) {
         if (!(datos.meta > 0) || !datos.hasta) return App.toast('Pon cuánto quieres juntar y para cuándo', 'error');

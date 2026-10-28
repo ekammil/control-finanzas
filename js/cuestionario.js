@@ -60,7 +60,7 @@
     { id: 'ahorro', titulo: '¿Para qué quieres ahorrar?', multi: true, def: ['emergencias'], otro: { icono: '🎯', tipo: 'ahorro', ph: 'Ej. Viaje, Celular' }, opciones: [
       { v: 'emergencias', t: '🛟 Emergencias', sobres: [sb('colchon', 'Colchón', '🛟', 'ahorro', 100, 60)] },
       { v: 'meta', t: '🎯 Una meta (auto, viaje, celular…)', sobres: [sb('meta', 'Mi meta', '🎯', 'ahorro', 0, 61)] },
-      { v: 'imprevistos', t: '🧾 Gastos inesperados', sobres: [sb('imprevistos', 'Imprevistos', '🧾', 'gasto', 50, 44)] },
+      { v: 'imprevistos', t: '🧾 Gastos inesperados', sobres: [sb('imprevistos', 'Imprevistos', '🧾', 'ahorro', 50, 62)] },
       { v: 'nada', t: 'Por ahora no', sobres: [], excluye: true }
     ] },
     /* negocio */
@@ -72,15 +72,39 @@
       { v: 'otro', t: '💼 Otro', sobres: [sb('gastosneg', 'Gastos del negocio', '💼', 'gasto', 200, 20)] }
     ] },
     { id: 'negrenta', grupo: 'negocio', titulo: '¿Pagas renta por el local o el lugar?', opciones: siNo([sb('rentaneg', 'Renta del local', '🏠', 'gasto', 1500, 5, MESF)]) },
-    { id: 'negreinv', grupo: 'negocio', titulo: '¿Quieres reinvertir una parte de cada venta o corte?', ayuda: 'Se aparta sola cada vez que registres un ingreso del negocio.', def: 'si', opciones: siNo([sb('reinversion', 'Reinversión', '📈', 'porIngreso', 100, 60)]) },
+    { id: 'negreinv', grupo: 'negocio', titulo: '¿Quieres reinvertir una parte de cada venta o corte?', ayuda: 'Se aparta sola cada vez que registres un ingreso del negocio.', def: 'si', opciones: siNo([sb('reinversion', 'Reinversión', '📈', 'porIngreso', 0, 60, { pct: 20 })]) },
     { id: 'negextra', grupo: 'negocio', titulo: '¿El negocio gasta en…?', multi: true, otro: { icono: '🧾', tipo: 'gasto', ph: 'Ej. Bolsas, Refacciones' }, opciones: [
       { v: 'envios', t: '🚚 Transporte o envíos', sobres: [sb('envios', 'Envíos', '🚚', 'gasto', 100, 30)] },
       { v: 'ayudantes', t: '👥 Pago a ayudantes', sobres: [sb('ayudantes', 'Ayudantes', '👥', 'gasto', 300, 10)] },
       { v: 'publicidad', t: '📣 Publicidad', sobres: [sb('publicidad', 'Publicidad', '📣', 'gasto', 200, 40, MES)] },
       { v: 'servicios', t: '💡 Luz, agua o internet', sobres: [sb('servneg', 'Servicios del negocio', '💡', 'gasto', 400, 6, MESF)] },
-      { v: 'impuestos', t: '🧾 Apartar para impuestos', sobres: [sb('impuestos', 'Impuestos', '🧾', 'porIngreso', 50, 61)] }
+      { v: 'impuestos', t: '🧾 Apartar para impuestos', sobres: [sb('impuestos', 'Impuestos', '🧾', 'porIngreso', 0, 61, { pct: 10 })] }
     ] }
   ];
+
+  // qué escribir en cada sobre sugerido, según para qué es
+  const AYUDA = {
+    transporte: 'Lo que gastas en pasajes en una semana normal.', gasolina: 'Lo que le pones al auto o moto en una semana.',
+    viajes: 'Uber, DiDi o taxi en una semana.', comida: 'Lo que gastas en comer fuera de casa en una semana.',
+    despensa: 'Lo del súper o el mercado.', antojos: 'Café, botanas, dulces… en una semana.',
+    proyectos: 'Materiales y proyectos de la escuela en un mes.', copias: 'Copias e impresiones en una semana.',
+    colegiatura: 'Cuánto pagas, cada cuánto y la fecha de tu próximo pago.', eventos: 'Salidas o eventos de la escuela en un mes.',
+    ropatrabajo: 'Ropa o uniforme del trabajo en un mes.', herramientas: 'Herramientas o equipo del trabajo en un mes.',
+    renta: 'Cuánto pagas de renta y la fecha de tu próximo pago.', servicios: 'Luz, agua, internet y celular juntos. Pon la fecha del próximo pago.',
+    suscripciones: 'Música, series, apps… Pon la fecha del próximo cobro.', deuda: 'Cuánto debes y para cuándo tienes que pagarlo.',
+    gym: 'La mensualidad y la fecha de tu próximo pago.', mascota: 'Comida, veterinario y cosas de tu mascota en un mes.',
+    ropa: 'Ropa, corte de pelo y cuidado personal en un mes.', salud: 'Medicinas y consultas en un mes.',
+    familia: 'Lo que das para tu casa o tu familia en un mes.', regalos: 'Se junta poco a poco para cumpleaños y fechas especiales.',
+    ocio: 'Para salir y tus gustos. Este sí cuenta en tu Disponible.', colchon: 'Para emergencias: se guarda cada vez que cobras.',
+    imprevistos: 'Para lo que no esperas (algo que se descompone, una multa…). Se junta poco a poco.',
+    mercancia: 'Lo que compras para vender en una semana.', insumos: 'Ingredientes y materia prima en una semana.',
+    gas: 'Gas o combustible del negocio en una semana.', materiales: 'Materiales para dar tu servicio en una semana.',
+    mantenimiento: 'Reparaciones y mantenimiento en un mes.', gastosneg: 'Gastos normales del negocio en una semana.',
+    rentaneg: 'Renta del local y la fecha de tu próximo pago.', reinversion: 'Una parte de cada venta vuelve al negocio.',
+    envios: 'Envíos o transporte del negocio en una semana.', ayudantes: 'Lo que pagas a ayudantes en una semana.',
+    publicidad: 'Anuncios y publicidad en un mes.', servneg: 'Luz, agua o internet del negocio. Pon la fecha del próximo pago.',
+    impuestos: 'Un porcentaje de cada ingreso para tus impuestos. Pon el que te corresponda.'
+  };
 
   App.OPC_CUENTAS = [
     { v: 'efectivo', t: '💵 Efectivo', nombre: 'Efectivo', icono: '💵', partes: true, desc: 'Billetes y monedas que traes contigo.' },
@@ -129,7 +153,7 @@
       if (ya[k]) return;
       ya[k] = true;
       const cuota = s.tipo === 'ahorro' && s.cuota > 0 ? redondo(U.convertir(s.cuota, 'semanal', fA)) : s.cuota;
-      lista.push(Object.assign({}, s, { esp, incluir: true, cuota: cuota ? String(cuota) : '', meta: s.meta ? String(s.meta) : '', frecAporte: fA, fechaPago: '' }));
+      lista.push(Object.assign({}, s, { esp, incluir: true, cuota: cuota ? String(cuota) : '', meta: s.meta ? String(s.meta) : '', pct: s.pct ? String(s.pct) : (s.tipo === 'porIngreso' && !s.cuota ? '' : 0), frecAporte: fA, fechaPago: '' }));
     };
     App.PREGUNTAS.forEach((q) => {
       const grupo = q.grupo || 'personal';
@@ -176,7 +200,8 @@
       esp.sobres.push(App.nuevoSobre({
         nombre: b.nombre.trim(), icono: b.icono, tipo: b.tipo, cuota: b.tipo === 'deuda' ? 0 : esMeta(b) ? ((App.calcMeta(num(b.meta), 0, b.hasta, b.frecAporte) || {}).cuota || 0) : num(b.cuota),
         meta: num(b.meta), desde: b.tipo === 'deuda' ? U.today() : '', hasta: b.tipo === 'deuda' || esMeta(b) ? (b.hasta || '') : '',
-        disponible: !!b.disponible, frecPago: U.frec(b.frecPago), frecAporte: U.frec(b.frecAporte), fechaPago: esGasto ? (b.fechaPago || '') : ''
+        disponible: !!b.disponible, frecPago: U.frec(b.frecPago), frecAporte: U.frec(b.frecAporte), fechaPago: esGasto ? (b.fechaPago || '') : '',
+        pct: b.tipo === 'porIngreso' ? Math.min(100, num(b.pct)) : 0
       }));
     });
     // lo que sobre de comida o antojos pasa al primer ahorro al terminar la semana
@@ -229,7 +254,12 @@
     }
     if (b.tipo === 'ahorro') return num(b.cuota) > 0 ? 'Se apartan <b>' + U.money(num(b.cuota)) + '</b> ' + U.FREC_CADA[fA] + '.' : 'Pon cuánto quieres guardar.';
     if (!(num(b.cuota) > 0)) return 'Pon cuánto es para calcular el aporte.';
-    return 'Se apartan <b>≈ ' + U.money(U.convertir(num(b.cuota), b.frecPago, fA)) + '</b> ' + U.FREC_CADA[fA] + '.';
+    let t = 'Se apartan <b>≈ ' + U.money(U.convertir(num(b.cuota), b.frecPago, fA)) + '</b> ' + U.FREC_CADA[fA] + '.';
+    if (b.fechaPago && b.fechaPago >= U.today()) {
+      const dias = U.daysBetween(U.today(), b.fechaPago) + 1;
+      if (dias < U.FREC_DIAS[U.frec(b.frecPago)] - 0.5) t += '<small>El primer pago es en ' + (dias === 1 ? '1 día' : dias + ' días') + ' (' + U.fechaCorta(b.fechaPago) + '): en el siguiente paso lo cubres con el dinero que ya tienes.</small>';
+    }
+    return t;
   };
 
   App.pantallaBienvenida = () => {
@@ -277,13 +307,17 @@
         h += '<div class="rev ' + (b.incluir ? '' : 'off') + '"><div class="rev-cab"><span class="rev-ico">' + b.icono + '</span>' +
           '<input class="rev-nombre" data-ob="' + i + '|nombre" value="' + U.esc(b.nombre) + '" maxlength="30">' +
           '<label class="sw"><input type="checkbox" data-ob-inc="' + i + '" ' + (b.incluir ? 'checked' : '') + '><i></i></label></div>';
+        const ayuda = AYUDA[b.key] || (b.custom ? (b.tipo === 'ahorro' ? 'Pon cuánto quieres juntar y para cuándo.' : 'Cuánto gastas o pagas, y cada cuánto.') : '');
+        if (b.incluir && ayuda) h += '<small class="rev-ayuda">' + ayuda + '</small>';
         if (b.incluir) {
           const esGasto = b.tipo === 'gasto' || b.tipo === 'limite';
           if (b.tipo === 'deuda') {
             h += '<div class="dos"><label class="campo"><span>¿Cuánto debes?</span><input inputmode="decimal" data-ob="' + i + '|meta" value="' + U.esc(b.meta) + '" placeholder="$0"></label>' +
               '<label class="campo"><span>¿Para cuándo?</span><input type="date" data-ob="' + i + '|hasta" data-obr="1" value="' + U.esc(b.hasta) + '"></label></div>';
           } else if (b.tipo === 'porIngreso') {
-            h += '<div class="dos"><label class="campo"><span>Por cada ingreso</span><input inputmode="decimal" data-ob="' + i + '|cuota" value="' + U.esc(b.cuota) + '"></label><div></div></div>';
+            h += Number(b.pct) > 0 || b.pct === ''
+              ? '<div class="dos"><label class="campo"><span>% de cada ingreso</span><input inputmode="decimal" data-ob="' + i + '|pct" value="' + U.esc(b.pct) + '" placeholder="Ej. 10"></label><div></div></div>'
+              : '<div class="dos"><label class="campo"><span>Cantidad por ingreso</span><input inputmode="decimal" data-ob="' + i + '|cuota" value="' + U.esc(b.cuota) + '"></label><div></div></div>';
           } else if (esMeta(b)) {
             h += '<div class="dos"><label class="campo"><span>¿Cuánto quieres juntar?</span><input inputmode="decimal" data-ob="' + i + '|meta" value="' + U.esc(b.meta) + '" placeholder="Ej. 5000"></label>' +
               '<label class="campo"><span>¿Para cuándo?</span><input type="date" data-ob="' + i + '|hasta" min="' + U.addDays(U.today(), 1) + '" value="' + U.esc(b.hasta) + '"></label></div>';
@@ -292,10 +326,13 @@
             h += '<div class="dos"><label class="campo"><span>¿Cuánto guardar?</span><input inputmode="decimal" data-ob="' + i + '|cuota" value="' + U.esc(b.cuota) + '" placeholder="$0"></label>' +
               (b.key === 'meta' || b.custom ? '<label class="campo"><span>¿Cuánto quieres juntar?</span><input inputmode="decimal" data-ob="' + i + '|meta" value="' + U.esc(b.meta) + '" placeholder="Opcional"></label>' : '<div></div>') + '</div>';
           } else {
-            const conFecha = ['quincenal', 'mensual', 'semestral', 'anual'].includes(U.frec(b.frecPago));
-            h += '<div class="dos"><label class="campo"><span>' + (b.tipo === 'limite' ? 'Tope' : '¿Cuánto es?') + '</span><input inputmode="decimal" data-ob="' + i + '|cuota" value="' + U.esc(b.cuota) + '" placeholder="$0"></label>' +
-              (conFecha ? '<label class="campo"><span>Próximo pago (opcional)</span><input type="date" data-ob="' + i + '|fechaPago" value="' + U.esc(b.fechaPago) + '"></label>' : '<div></div>') + '</div>';
-            h += '<div class="sub-etq">Cada cuánto lo pagas o gastas</div>' + App.tabsFrec('ob-frec-pago', U.frec(b.frecPago), 'data-i="' + i + '"');
+            // un pago con fecha (renta, gym…) pide cuánto y cuándo; un gasto pide cuánto gastas; uno con tope, cuánto puedes gastar
+            const esPago = !!b.conFecha;
+            const conFecha = b.tipo !== 'limite' && (esPago || ['quincenal', 'mensual', 'semestral', 'anual'].includes(U.frec(b.frecPago)));
+            const etq = b.tipo === 'limite' ? '¿Cuánto puedes gastar?' : esPago ? '¿Cuánto pagas?' : '¿Cuánto gastas?';
+            h += '<div class="dos"><label class="campo"><span>' + etq + '</span><input inputmode="decimal" data-ob="' + i + '|cuota" value="' + U.esc(b.cuota) + '" placeholder="$0"></label>' +
+              (conFecha ? '<label class="campo"><span>' + (esPago ? '¿Cuándo es el próximo pago?' : 'Fecha de pago (si tiene)') + '</span><input type="date" data-ob="' + i + '|fechaPago" value="' + U.esc(b.fechaPago) + '"></label>' : '<div></div>') + '</div>';
+            h += '<div class="sub-etq">' + (esPago ? 'Cada cuánto lo pagas' : 'Cada cuánto') + '</div>' + App.tabsFrec('ob-frec-pago', U.frec(b.frecPago), 'data-i="' + i + '"');
           }
           if (esGasto || b.tipo === 'ahorro' || b.tipo === 'deuda') {
             h += '<div class="sub-etq">Cada cuánto apartas</div>' + App.tabsFrec('ob-frec-aporte', U.frec(b.frecAporte), 'data-i="' + i + '"');
@@ -353,7 +390,8 @@
   };
   const pantallaAcomodo = (ob) => {
     const c = App.calc();
-    let h = '<h1>Acomoda tu dinero</h1><p>Te propongo cuánto poner en cada sobre para que todo quede en su lugar. Cambia lo que quieras.</p>';
+    const finAc = App.finHorizonte(U.today());
+    let h = '<h1>Acomoda tu dinero</h1><p>Te propongo cuánto poner en cada sobre para que te alcance hasta que vuelvas a cobrar (' + App.textoCobro(finAc) + '). Lo que sobre lo eliges abajo. Cambia lo que quieras.</p>';
     App.state.espacios.forEach((e) => {
       const lista = App.propuestaAcomodo(e.id, c);
       if (!lista.length) return;
@@ -361,10 +399,10 @@
       const necesita = lista.reduce((t, x) => t + x.necesita, 0);
       h += '<div class="seccion acomodo"><div class="seccion-titulo"><h2>' + U.esc(e.icono + ' ' + e.nombre) + '</h2><span class="num" style="color:var(--text-2);font-size:14px">Tienes ' + U.money(libre) + '</span></div>';
       lista.forEach((x) => {
-        h += '<div class="fila"><div class="ico">' + U.esc(x.s.icono) + '</div><div class="txt"><b>' + U.esc(x.s.nombre) + '</b><small>' + U.esc(x.motivo) + (x.necesita > 0 ? ' · sugerido ' + U.money0(x.necesita) : '') + '</small></div>' +
+        h += '<div class="fila"><div class="ico">' + U.esc(x.s.icono) + '</div><div class="txt"><b>' + U.esc(x.s.nombre) + '</b><small>' + U.esc(x.motivo) + (x.necesita > 0 ? ' · <b>sugerido ' + U.money0(x.necesita) + '</b>' : ' · ya está cubierto') + '</small></div>' +
           '<div class="der"><input inputmode="decimal" data-in="ob-ac" data-id="' + x.s.id + '" data-esp="' + e.id + '" value="' + U.esc(ob.acomodo[x.s.id] || '') + '" placeholder="$0"></div></div>';
       });
-      if (necesita > libre + 0.5) h += '<p class="nota cuidado">No alcanza para todo: faltan ' + U.money(necesita - libre) + '. Se completa con tus próximos ingresos.</p>';
+      if (necesita > libre + 0.5) h += '<p class="nota cuidado">No alcanza para todo: faltan ' + U.money(necesita - libre) + '. Primero van los pagos con fecha; lo demás se completa con tus próximos ingresos.</p>';
       const destinos = e.sobres.filter((s) => s.tipo === 'ahorro' || s.disponible);
       h += '<div class="etq">Lo que sobre va a</div><div class="chips wrap">' +
         '<button class="chip ' + (!ob.destino[e.id] ? 'on' : '') + '" data-a="ob-destino" data-esp="' + e.id + '" data-v="">✨ Libre</button>' +
@@ -504,15 +542,22 @@
       const ob = App.ui.ob; ob.destino[el.dataset.esp] = el.dataset.v; quedarse();
     },
     'ob-fin': () => {
-      const S = App.state; const ob = App.ui.ob; const c = App.calc();
+      const S = App.state; const ob = App.ui.ob; const c = App.calc(); const hoy = U.today();
       for (const e of S.espacios) {
         if (sumaEsp(ob, e) > c.esp[e.id].libre + 0.004) return App.toast('En ' + e.nombre + ' pusiste más de lo que tienes', 'error');
       }
       S.espacios.forEach((e) => {
         let puesto = 0;
+        const prop = {}; App.propuestaAcomodo(e.id, c).forEach((x) => { prop[x.s.id] = x; });
         e.sobres.forEach((s) => {
           const v = num(ob.acomodo[s.id]);
-          if (v > 0) { S.movs.push(App.nuevoMov({ tipo: 'mover', monto: v, espacio: e.id, sobre: '', espacio2: e.id, sobre2: s.id, nota: 'Acomodo inicial', origen: 'auto' })); puesto += v; }
+          if (v > 0) {
+            const m = App.nuevoMov({ tipo: 'mover', monto: v, espacio: e.id, sobre: '', espacio2: e.id, sobre2: s.id, nota: 'Acomodo inicial', origen: 'auto' });
+            // lo que es para los siguientes periodos cuenta para ellos (así no se aparta doble)
+            const por = prop[s.id] ? App.porDe(prop[s.id].por, v, hoy) : null;
+            if (por) m.por = por;
+            S.movs.push(m); puesto += v;
+          }
         });
         const resto = U.r2(c.esp[e.id].libre - puesto);
         const dest = ob.destino[e.id] && e.sobres.find((s) => s.id === ob.destino[e.id]);

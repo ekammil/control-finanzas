@@ -31,7 +31,8 @@
       '<div class="mini-totales">' +
       '<div><span>Ahorrado</span><b class="num">' + U.moneyShort(c.tot.ahorro) + '</b></div>' +
       '<div><span>Apartado</span><b class="num">' + U.moneyShort(c.tot.apartado) + '</b></div>' +
-      (c.tot.deudaTarjeta > 0.004 ? '<div><span>Tarjetas</span><b class="num neg">−' + U.moneyShort(c.tot.deudaTarjeta) + '</b></div>' : '') +
+      // lo que aún falta juntar para la tarjeta (lo ya juntado está en su sobre): así Disponible + Ahorrado + Apartado − esto = Total
+      (c.tot.porJuntar > 0.004 ? '<div><span>Tarjeta por juntar</span><b class="num neg">−' + U.moneyShort(c.tot.porJuntar) + '</b></div>' : '') +
       '<div><span>Total</span><b class="num">' + U.moneyShort(c.tot.total) + '</b></div>' +
       '</div></div>';
 
@@ -134,6 +135,13 @@
         out.push('<div class="aviso"><div class="ico">⚠️</div><div class="txt"><b>' + U.esc(e.nombre) + ': libre en ' + U.money(x.libre) + '</b><p>Gastaste más de lo que tenías libre. Se cubre con tu siguiente ingreso.</p></div></div>');
       }
     });
+    // sobres que apartan con otro ritmo distinto a cuando cobras (ej. cobras diario y apartan cada semana)
+    if (!S.ajustes.avisoRitmo) {
+      const f = S.ajustes.frecIngreso; let n = 0;
+      S.espacios.forEach((e) => e.sobres.forEach((s) => { if (s.tipo !== 'tarjeta' && s.tipo !== 'porIngreso' && U.frec(s.frecAporte || f) !== f) n++; }));
+      if (n >= 2) out.push('<div class="aviso"><div class="ico">🔁</div><div class="txt"><b>Cobras ' + U.FREC_CADA[f] + ', pero ' + n + ' sobres apartan con otro ritmo</b><p>Si apartan igual que como cobras, cada ingreso se reparte parejo y no te quedas sin dinero un día.</p>' +
+        '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" data-h="frec-ingreso">Revisar</button><button class="btn-chico" data-a="aviso-ritmo-no">Así está bien</button></div></div></div>');
+    }
     // cuadre de la noche
     if (S.ajustes.cuadreNoche && new Date().getHours() >= 20 && S.ajustes.ultimoCuadre !== hoy) {
       out.push('<div class="aviso"><div class="ico">🌙</div><div class="txt"><b>Cuadre de la noche</b><p>Revisa en 1 minuto que tu dinero real coincida.</p>' +
@@ -219,7 +227,7 @@
           const sem = Math.ceil(resta / ritmoSem);
           pie1 = 'Faltan ' + U.money0(resta) + ' · ~' + (sem > 104 ? Math.round(sem / 52) + ' años' : sem > 8 ? Math.round(sem / 4.33) + ' meses' : sem + ' semanas');
         } else pie1 = 'Faltan ' + U.money0(resta);
-        pie2 = ritmo > 0 ? U.money0(ritmo) + U.FREC_POR[x.frecAporte] : s.tipo === 'porIngreso' ? U.money0(s.cuota) + ' por ingreso' : '';
+        pie2 = ritmo > 0 ? U.money0(ritmo) + U.FREC_POR[x.frecAporte] : s.tipo === 'porIngreso' ? App.txtPorIngreso(s) : '';
         clase = 'azul';
       }
       const p = objetivo > 0 ? actual / objetivo : 0;
@@ -273,7 +281,7 @@
       fila('hoja', I.phone, 'Instalar en tu teléfono', 'iPhone y Android', 'data-h="instalar"') +
       fila('hoja', I.apple, 'Atajos del iPhone', 'Gasto rápido y Apple Pay', 'data-h="atajo"') + '</div>';
     h += '<div class="seccion"><button class="btn peligro" data-a="hoja" data-h="borrar">Borrar todos mis datos</button>' +
-      '<p class="nota" style="text-align:center">Control de Finanzas · v1.3 · Tus datos viven en este teléfono.</p></div>';
+      '<p class="nota" style="text-align:center">Control de Finanzas · v1.4 · Tus datos viven en este teléfono.</p></div>';
     h += '</div>';
     return h;
   };

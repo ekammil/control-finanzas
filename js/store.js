@@ -4,11 +4,11 @@
   const App = window.App || (window.App = {});
 
   App.TIPOS_SOBRE = {
-    gasto: { nombre: 'Gasto', desc: 'Lo que gastas o pagas cada cierto tiempo. Lo que no gastes se acumula.' },
-    limite: { nombre: 'Gasto con tope', desc: 'Se rellena solo hasta el tope de cada periodo. Lo que sobre puede pasar a otro sobre.' },
+    gasto: { nombre: 'Gasto', desc: 'Lo que gastas o pagas cada cierto tiempo (comida, renta, gym). Con fecha de pago, se junta completo para ese día. Lo que no gastes se queda en el sobre.' },
+    limite: { nombre: 'Gasto con tope', desc: 'Un máximo para gastar en cada periodo (ej. $250 a la semana de transporte). Lo que sobre cuenta para el siguiente o pasa a otro sobre.' },
     ahorro: { nombre: 'Ahorro', desc: 'Guarda una cantidad cada cierto tiempo. Puedes ponerle una meta y una fecha.' },
     deuda: { nombre: 'Pago único', desc: 'Junta un total antes de una fecha (una deuda, una compra a plazos). El aporte se calcula solo.' },
-    porIngreso: { nombre: 'Por cada ingreso', desc: 'Aparta una cantidad fija cada vez que registras un ingreso en este espacio.' }
+    porIngreso: { nombre: 'Por cada ingreso', desc: 'Cada vez que registras un ingreso en este espacio, aparta una cantidad fija o un porcentaje (ej. 10% para impuestos).' }
   };
   // "tarjeta" es un sobre interno: junta poco a poco lo que debes de compras a pagar después
   App.TIPO_TARJETA = { nombre: 'Pago de tarjeta', desc: 'Junta poco a poco lo de tus compras con tarjeta de crédito que elegiste pagar después.' };
@@ -205,7 +205,7 @@
     App.state.movs.push(mov);
     let reparto = null;
     if (mov.tipo === 'ingreso' && opts.reparto !== false && mov.espacio) {
-      reparto = App.repartir(mov.espacio, mov.fecha, true);
+      reparto = App.repartir(mov.espacio, mov.fecha, true, mov.monto);
     }
     if (!opts.noSave) App.save();
     return { mov, reparto };
@@ -228,37 +228,44 @@
   };
 
   /* Reparte lo libre de un espacio en sus sobres (primero pagos con fecha, luego en el orden de la lista) */
-  App.repartir = (espId, fecha, conPorIngreso) => {
+  App.repartir = (espId, fecha, conPorIngreso, ingreso) => {
     const esp = App.espacio(espId);
     if (!esp) return null;
     fecha = fecha || U.today();
     const partes = [];
     const pendientes = [];
-    const agregar = (sobre, x, nota) => {
+    const agregar = (sobre, x, nota, por) => {
       x = U.r2(x);
       if (x <= 0) return;
-      App.state.movs.push(App.nuevoMov({ fecha, tipo: 'mover', monto: x, espacio: espId, sobre: '', espacio2: espId, sobre2: sobre.id, nota, origen: 'auto' }));
+      const m = App.nuevoMov({ fecha, tipo: 'mover', monto: x, espacio: espId, sobre: '', espacio2: espId, sobre2: sobre.id, nota, origen: 'auto' });
+      const p = por ? App.porDe(por, x, fecha) : null;
+      if (p) m.por = p;
+      App.state.movs.push(m);
       partes.push({ sobre: sobre.nombre, monto: x });
     };
     // 1) "Por cada ingreso"
     if (conPorIngreso) {
-      esp.sobres.filter((s) => s.tipo === 'porIngreso' && s.cuota > 0).forEach((s) => {
+      esp.sobres.filter((s) => s.tipo === 'porIngreso' && (s.cuota > 0 || s.pct > 0)).forEach((s) => {
         const c = App.calc(fecha);
         const libre = c.esp[espId].libre;
         const meta = s.meta > 0 ? Math.max(0, s.meta - c.sob[s.id].saldo) : Infinity;
-        agregar(s, Math.min(s.cuota, Math.max(0, libre), meta), 'Por ingreso');
+        agregar(s, Math.min(App.montoPorIngreso(s, ingreso), Math.max(0, libre), meta), 'Por ingreso');
       });
     }
-    // 2) lo que les falta en este periodo (primero lo que tiene fecha más cercana)
+    // 2) lo que les falta hasta tu próximo cobro (primero lo que tiene fecha más cercana)
     const c = App.calc(fecha);
     let libre = c.esp[espId].libre;
-    const lista = esp.sobres.map((s, i) => ({ s, i, st: c.sob[s.id] })).filter((x) => x.st && x.st.falta > 0);
+    // hasta el próximo cobro: se cuenta desde tu último ingreso (si repartes otro día, no se adelanta de más)
+    const ult = App.state.movs.reduce((u, m) => (m.tipo === 'ingreso' && m.espacio === espId && m.fecha <= fecha && m.fecha > u ? m.fecha : u), '');
+    let fin = ult ? App.finHorizonte(ult) : '';
+    if (!fin || fin <= fecha) fin = App.finHorizonte(fecha);
+    const lista = esp.sobres.map((s, i) => ({ s, i, st: c.sob[s.id] })).filter((x) => x.st).map((x) => { const n = App.necesidad(x.s, c.L[x.s.id], fecha, fin); return Object.assign(x, { falta: n.total, por: n.por }); }).filter((x) => x.falta > 0);
     const urge = (x) => (x.s.tipo === 'deuda' || x.s.tipo === 'tarjeta' || x.s.fechaPago ? 0 : 1);
     lista.sort((a, b) => urge(a) - urge(b) || (urge(a) === 0 ? String(a.st.venc || '9').localeCompare(String(b.st.venc || '9')) : 0) || a.i - b.i);
-    lista.forEach(({ s, st }) => {
-      const x = U.r2(Math.min(st.falta, Math.max(0, libre)));
-      if (x > 0) { agregar(s, x, 'Reparto'); libre = U.r2(libre - x); }
-      if (x < st.falta) pendientes.push({ sobre: s.nombre, monto: U.r2(st.falta - x) });
+    lista.forEach(({ s, falta, por }) => {
+      const x = U.r2(Math.min(falta, Math.max(0, libre)));
+      if (x > 0) { agregar(s, x, 'Reparto', por); libre = U.r2(libre - x); }
+      if (x < falta) pendientes.push({ sobre: s.nombre, monto: U.r2(falta - x) });
     });
     return { partes, pendientes };
   };
@@ -278,9 +285,16 @@
         if (!s.cierre) { s.cierre = fin; cambio = true; return; }
         if (s.cierre >= fin) return;
         const st = App.calc(fin).sob[s.id];
-        if (st && st.saldo > 0) {
-          App.state.movs.push(App.nuevoMov({ fecha: fin, tipo: 'mover', monto: st.saldo, espacio: e.id, sobre: s.id, espacio2: e.id, sobre2: destino.id, nota: 'Sobrante de ' + s.nombre, origen: 'auto' }));
-          hechos.push({ de: s.nombre, a: destino.nombre, monto: st.saldo });
+        // lo que ya se apartó para el periodo que sigue no es sobrante: se queda
+        const adelantado = App.state.movs.reduce((t, m) => {
+          if (m.tipo !== 'mover' || m.sobre2 !== s.id || m.fecha > fin) return t;
+          const por = App.porValido(m, Number(m.monto));
+          return t + (por ? por.filter((p) => p[0] > fin).reduce((a, p) => a + p[1], 0) : 0);
+        }, 0);
+        const sobra = st ? U.r2(st.saldo - adelantado) : 0;
+        if (sobra > 0.004) {
+          App.state.movs.push(App.nuevoMov({ fecha: fin, tipo: 'mover', monto: sobra, espacio: e.id, sobre: s.id, espacio2: e.id, sobre2: destino.id, nota: 'Sobrante de ' + s.nombre, origen: 'auto' }));
+          hechos.push({ de: s.nombre, a: destino.nombre, monto: sobra });
         }
         s.cierre = fin; cambio = true;
       });
