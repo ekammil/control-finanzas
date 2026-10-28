@@ -1,5 +1,5 @@
 /* Control de Finanzas — trabajo sin internet */
-const VERSION = 'cdf-v1.3.1';
+const VERSION = 'cdf-v1.4.0';
 const ARCHIVOS = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest', 'google-sync.gs',
   'js/util.js', 'js/store.js', 'js/calc.js', 'js/ui.js', 'js/planetas.js', 'js/screens.js', 'js/sheets.js', 'js/sheets2.js', 'js/sync.js', 'js/cuestionario.js', 'js/main.js',

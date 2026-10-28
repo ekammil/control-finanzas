@@ -279,6 +279,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .rev { padding: 12px 0 14px; border-bottom: 1px solid var(--line); transition: opacity .2s; }
 .rev.off { opacity: .45; }
 .rev-cab { display: flex; align-items: center; gap: 10px; }
+.rev-ayuda { display: block; color: var(--text-2); font-size: 13px; margin: 6px 0 0 36px; line-height: 1.35; }
 .rev-ico { width: 38px; height: 38px; border-radius: 50%; background: var(--fill); display: grid; place-items: center; font-size: 18px; flex: none; }
 .rev-nombre { flex: 1; min-width: 0; background: none; border: 0; border-bottom: 1px solid transparent; font-size: 16.5px; font-weight: 600; padding: 6px 0; outline: none; }
 .rev-nombre:focus { border-bottom-color: rgba(255,255,255,.3); }
