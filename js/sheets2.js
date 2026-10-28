@@ -117,6 +117,7 @@
       y += '<div class="dos" style="margin-top:16px">' +
         '<button class="btn sec" style="margin:0" data-a="repartir" data-id="' + e.id + '" ' + (x.libre > 0 && x.falta > 0 ? '' : 'disabled') + '>✨ Repartir</button>' +
         '<button class="btn sec" style="margin:0" data-a="hoja" data-h="registro" data-modo="mover" data-esp="' + e.id + '" data-apilar="1">' + I.swap + ' Mover</button></div>';
+      y += cuadroMinimo(e, c);
       y += '<div class="seccion" style="margin-top:20px"><div class="seccion-titulo"><h2>Sobres</h2><button data-a="hoja" data-h="sobre-editar" data-esp="' + e.id + '" data-apilar="1">Agregar</button></div>' +
         '<p class="nota" style="margin:-4px 0 6px">El número de la derecha es lo que hay ahora en cada sobre. La barra muestra cuánto llevas gastado de lo planeado, o cuánto llevas juntado de tu pago o meta. Toca un sobre para ver todo el detalle.</p>';
       if (!e.sobres.length) y += '<div class="nota">Este espacio no tiene sobres. Agrega uno para organizar tu dinero.</div>';
@@ -133,6 +134,48 @@
       y += '</div><button class="btn sec" data-a="hoja" data-h="espacio-editar" data-id="' + e.id + '" data-apilar="1">' + I.edit + ' Editar espacio</button>';
       return y;
     }
+  };
+
+  /* Lo mínimo que tiene que entrar a un espacio para cubrir todos sus sobres, y si lo que te entra alcanza */
+  App.minimoEspacio = (e, c) => {
+    const fI = U.frec(App.state.ajustes.frecIngreso);
+    let base = 0, pct = 0; const por = [];
+    e.sobres.forEach((s) => {
+      const st = c.sob[s.id]; if (!st) return;
+      let d = 0;
+      if (s.tipo === 'porIngreso') { if (Number(s.pct) > 0) pct += Number(s.pct); else d = U.convertir(Number(s.cuota) || 0, fI, 'diario'); }
+      else if (s.tipo === 'gasto' || s.tipo === 'limite') d = U.convertir(Number(s.cuota) || 0, s.frecPago, 'diario');
+      else d = U.convertir(st.constante || 0, st.frecAporte, 'diario');
+      if (d > 0.004) { base += d; por.push([s, d]); }
+    });
+    pct = Math.min(pct, 90);
+    const dia = base / (1 - pct / 100);
+    // lo que te entró a este espacio en los últimos 30 días (o desde tu primer ingreso, si es más reciente)
+    const hoy = U.today(); const desde = U.addDays(hoy, -29);
+    const ings = App.state.movs.filter((m) => m.tipo === 'ingreso' && m.espacio === e.id && m.fecha <= hoy);
+    const primero = ings.reduce((a, m) => (m.fecha < a ? m.fecha : a), hoy);
+    const ini = primero > desde ? primero : desde;
+    const dias = U.daysBetween(ini, hoy) + 1;
+    const entra = ings.filter((m) => m.fecha >= ini).reduce((t, m) => t + Number(m.monto), 0);
+    return { dia, pct, por: por.sort((a, b) => b[1] - a[1]), entraDia: ings.length && dias >= 7 ? entra / dias : null, dias };
+  };
+  const cuadroMinimo = (e, c) => {
+    const m = App.minimoEspacio(e, c);
+    if (!(m.dia > 0)) return '';
+    const mes = m.dia * 365 / 12;
+    let y = '<div class="seccion" style="margin-top:20px"><div class="seccion-titulo"><h2>💡 Lo mínimo que necesitas</h2></div>' +
+      '<p class="nota" style="margin:-4px 0 6px">Lo que te tiene que entrar en ' + U.esc(e.nombre) + ' para cubrir todos sus sobres' + (m.pct > 0 ? ' (ya contando el ' + U.r2(m.pct) + '% que se aparta de cada ingreso)' : '') + '.</p>' +
+      '<div class="cuadro-sobre" style="margin-top:0">' +
+      [['Al día', m.dia], ['A la semana', m.dia * 7], ['A la quincena', mes / 2], ['Al mes', mes]].map(([t, v]) => '<div><span>' + t + '</span><b class="num">' + U.money(v) + '</b></div>').join('') + '</div>';
+    if (m.entraDia !== null) {
+      const dif = (m.entraDia - m.dia) * 365 / 12;
+      y += '<p class="nota ' + (dif < 0 ? 'cuidado' : '') + '" style="margin-top:10px">' + (m.dias >= 30 ? 'En los últimos 30 días' : 'En los últimos ' + m.dias + ' días') + ' te entraron en promedio ' + U.money(m.entraDia) + ' al día (≈ ' + U.money0(m.entraDia * 365 / 12) + ' al mes). ' +
+        (dif >= 0 ? '✅ Te alcanza para todo y te sobran ≈ ' + U.money0(dif) + ' al mes.' : '⚠️ No te alcanza: te faltan ≈ ' + U.money0(-dif) + ' al mes (' + U.money0(-dif * 12 / 365) + ' al día).') + '</p>';
+    } else y += '<p class="nota" style="margin-top:10px">Cuando registres ingresos en este espacio por al menos una semana, aquí te digo si te alcanza.</p>';
+    y += '<details class="nota" style="margin-top:6px"><summary>Ver cuánto pide cada sobre</summary>' +
+      m.por.map(([s, d]) => '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0"><span>' + U.esc(s.icono) + ' ' + U.esc(s.nombre) + '</span><span class="num">' + U.money0(d * 365 / 12) + '/mes · ' + U.money(d) + '/día</span></div>').join('') +
+      (m.pct > 0 ? '<div style="padding:3px 0">+ ' + U.r2(m.pct) + '% de cada ingreso para sobres por ingreso</div>' : '') + '</details></div>';
+    return y;
   };
 
   /* Cuadro con todo lo de un sobre: lo que hay, lo gastado, lo que te queda, cuánto apartas y cuánto falta */
