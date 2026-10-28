@@ -308,6 +308,8 @@
         y += '<div class="etq">' + (h.tipo === 'limite' ? '¿Cuánto puedes gastar y cada cuánto?' : h.fechaPago ? '¿Cuánto pagas y cada cuánto?' : '¿Cuánto gastas y cada cuánto?') + '</div>';
         y += '<label class="campo" style="margin-top:0"><span>' + (h.tipo === 'limite' ? 'Tope' : h.fechaPago ? 'Monto del pago' : 'Monto') + '</span><input inputmode="decimal" data-m="cuota" value="' + U.esc(h.cuota) + '" placeholder="$0"></label>';
         y += App.tabsFrec('se-frec-pago', U.frec(h.frecPago));
+        { const nD = U.diasCustom(h.frecPago);
+          y += '<label class="campo campo-dias' + (nD ? ' on' : '') + '"><span>📆 O cada cuántos días (ej. 3, 20, 30)</span><input inputmode="numeric" data-dias="1" value="' + (nD || '') + '" placeholder="Escribe los días"></label>'; }
         if (h.tipo === 'limite') {
           // un tope es un máximo para gastar, no un pago con fecha
           y += '<p class="nota">Puedes gastar hasta ' + (num(h.cuota) > 0 ? U.money0(num(h.cuota)) : 'el tope') + ' ' + U.FREC_CADA[U.frec(h.frecPago)] + '. Te aviso si te acercas o te pasas.</p>';

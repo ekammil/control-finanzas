@@ -483,6 +483,12 @@
   document.addEventListener('change', (ev) => {
     const el = ev.target;
     if (!App.h && App.inputExtra && App.inputExtra(el, 'change')) return;
+    if (el.dataset.dias && App.h) {
+      // "cada N días": 1 = diario, 7 = semanal, lo demás se guarda como dN
+      const n = Math.round(Number(String(el.value).replace(/[^\d]/g, '')));
+      if (n >= 1 && n <= 365) App.h.frecPago = n === 1 ? 'diario' : n === 7 ? 'semanal' : 'd' + n;
+      App.renderHoja(); return;
+    }
     if (el.dataset.m && App.h) {
       App.h[el.dataset.m] = el.type === 'checkbox' ? el.checked : el.value;
       if (el.dataset.render || el.tagName === 'SELECT') App.renderHoja();

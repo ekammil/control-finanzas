@@ -28,13 +28,16 @@
 
   /* ---------- frecuencias: diario, semanal, quincenal, mensual, semestral, anual ---------- */
   U.FRECS = ['diario', 'semanal', 'quincenal', 'mensual', 'semestral', 'anual'];
-  U.FREC_TXT = { diario: 'Diario', semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual', semestral: 'Semestral', anual: 'Anual' };
-  U.FREC_CADA = { diario: 'cada día', semanal: 'cada semana', quincenal: 'cada quincena', mensual: 'cada mes', semestral: 'cada semestre', anual: 'cada año' };
-  U.FREC_ESTE = { diario: 'hoy', semanal: 'esta semana', quincenal: 'esta quincena', mensual: 'este mes', semestral: 'este semestre', anual: 'este año' };
-  U.FREC_POR = { diario: '/día', semanal: '/sem', quincenal: '/quincena', mensual: '/mes', semestral: '/semestre', anual: '/año' };
-  U.FREC_VECES = { diario: 365, semanal: 365 / 7, quincenal: 24, mensual: 12, semestral: 2, anual: 1 }; // veces por año (semanal exacto: $70 a la semana = $10 al día)
-  U.FREC_DIAS = { diario: 1, semanal: 7, quincenal: 15.2, mensual: 30.4, semestral: 182.6, anual: 365.2 };
-  U.frec = (f) => (U.FREC_VECES[f] ? f : 'semanal');
+  // también "cada N días" (d3, d20, d30…) para pagos que no son semanales ni mensuales
+  U.diasCustom = (f) => { const m = /^d(\d{1,3})$/.exec(typeof f === 'string' ? f : ''); const n = m ? Number(m[1]) : 0; return n >= 2 && n <= 365 ? n : 0; };
+  const conDias = (base, fn) => new Proxy(base, { get: (o, k) => (Object.prototype.hasOwnProperty.call(o, k) ? o[k] : U.diasCustom(k) ? fn(U.diasCustom(k)) : o[k]) });
+  U.FREC_TXT = conDias({ diario: 'Diario', semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual', semestral: 'Semestral', anual: 'Anual' }, (n) => 'Cada ' + n + ' días');
+  U.FREC_CADA = conDias({ diario: 'cada día', semanal: 'cada semana', quincenal: 'cada quincena', mensual: 'cada mes', semestral: 'cada semestre', anual: 'cada año' }, (n) => 'cada ' + n + ' días');
+  U.FREC_ESTE = conDias({ diario: 'hoy', semanal: 'esta semana', quincenal: 'esta quincena', mensual: 'este mes', semestral: 'este semestre', anual: 'este año' }, (n) => 'en estos ' + n + ' días');
+  U.FREC_POR = conDias({ diario: '/día', semanal: '/sem', quincenal: '/quincena', mensual: '/mes', semestral: '/semestre', anual: '/año' }, (n) => '/' + n + ' días');
+  U.FREC_VECES = conDias({ diario: 365, semanal: 365 / 7, quincenal: 24, mensual: 12, semestral: 2, anual: 1 }, (n) => 365 / n); // veces por año (semanal exacto: $70 a la semana = $10 al día)
+  U.FREC_DIAS = conDias({ diario: 1, semanal: 7, quincenal: 15.2, mensual: 30.4, semestral: 182.6, anual: 365.2 }, (n) => n);
+  U.frec = (f) => (U.FRECS.includes(f) || U.diasCustom(f) ? f : 'semanal');
   // convierte un monto de una frecuencia a otra (ej. $400 al mes → por día)
   U.convertir = (monto, de, a) => (Number(monto) || 0) * U.FREC_VECES[U.frec(de)] / U.FREC_VECES[U.frec(a)];
 
@@ -42,8 +45,11 @@
   const fechaYMD = (y, m, d) => { const b = new Date(y, m, 1, 12); return U.ymd(new Date(b.getFullYear(), b.getMonth(), Math.min(d, ultimoDia(b.getFullYear(), b.getMonth())), 12)); };
   U.addMonths = (s, n) => { const d = U.parse(s); return fechaYMD(d.getFullYear(), d.getMonth() + n, d.getDate()); };
 
+  const EPOCA = '2024-01-01'; // los periodos de "cada N días" se cuentan desde aquí
   /* Periodo de calendario que contiene la fecha: { ini, fin } (fin = día siguiente al último) */
   U.periodo = (frec, s) => {
+    const n = U.diasCustom(frec);
+    if (n) { const i = U.addDays(EPOCA, Math.floor(U.daysBetween(EPOCA, s) / n) * n); return { ini: i, fin: U.addDays(i, n) }; }
     const d = U.parse(s); const y = d.getFullYear(), m = d.getMonth(), dia = d.getDate();
     switch (U.frec(frec)) {
       case 'diario': return { ini: s, fin: U.addDays(s, 1) };
@@ -58,6 +64,8 @@
   /* Cuántos periodos hay desde el que contiene "desde" hasta el que contiene "hasta" (incluidos) */
   U.contarPeriodos = (frec, desde, hasta) => {
     if (hasta < desde) return 0;
+    const n = U.diasCustom(frec);
+    if (n) return Math.floor(U.daysBetween(EPOCA, hasta) / n) - Math.floor(U.daysBetween(EPOCA, desde) / n) + 1;
     const a = U.parse(desde), b = U.parse(hasta);
     const mes = (d) => d.getFullYear() * 12 + d.getMonth();
     switch (U.frec(frec)) {
@@ -72,6 +80,7 @@
 
   /* Fechas que se repiten a partir de una fecha ancla: k = 0 es el ancla, k = 1 la siguiente, k = -1 la anterior */
   U.venc = (frec, ancla, k) => {
+    if (U.diasCustom(frec)) return U.addDays(ancla, U.diasCustom(frec) * k);
     const d = U.parse(ancla); const y = d.getFullYear(), m = d.getMonth(), dia = d.getDate();
     switch (U.frec(frec)) {
       case 'diario': return U.addDays(ancla, k);
