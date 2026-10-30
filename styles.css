@@ -328,6 +328,10 @@ code.url { display: block; word-break: break-all; background: var(--fill); paddi
 .ok-check { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 6px; }
 
 @media (min-width: 700px) { .hero .grande { font-size: 56px; } }
+/* ---------- campanita ---------- */
+.campana { position: relative; }
+.campana .punto { position: absolute; top: 2px; right: 2px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: #ff453a; color: #fff; font-size: 11px; font-weight: 700; font-style: normal; line-height: 17px; text-align: center; }
+
 /* ---------- detalle de sobre ---------- */
 .cuadro-sobre { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 .cuadro-sobre > div { background: var(--fill); border-radius: 14px; padding: 10px 12px; }
