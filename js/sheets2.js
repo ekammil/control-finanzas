@@ -236,7 +236,7 @@
         (ct ? '<button class="btn sec" style="margin:0" data-a="hoja" data-h="cuenta" data-id="' + ct.id + '" data-apilar="1">💳 Ver tarjeta</button>'
           : '<button class="btn sec" style="margin:0" data-a="hoja" data-h="registro" data-modo="gasto" data-esp="' + h.esp + '" data-sobre="' + s.id + '" data-apilar="1">− Gasto</button>') +
         '<button class="btn sec" style="margin:0" data-a="hoja" data-h="registro" data-modo="mover" data-esp="' + h.esp + '" data-sobre2="' + s.id + '" data-apilar="1">' + I.swap + ' Mover</button></div>';
-      if (st.porCubrir > 0.004) y += '<button class="btn" style="margin-top:12px" data-a="hoja" data-h="cubrir" data-esp="' + h.esp + '" data-id="' + s.id + '" data-apilar="1">🩹 Cubrir los ' + U.money(st.porCubrir) + ' que te pasaste</button>';
+      { const pc = App.porCubrir(s, st); if (pc > 0.004) y += '<button class="btn" style="margin-top:12px" data-a="hoja" data-h="cubrir" data-esp="' + h.esp + '" data-id="' + s.id + '" data-apilar="1">🩹 Cubrir los ' + U.money(pc) + ' que te pasaste</button>'; }
       y += '<div class="seccion" style="margin-top:20px"><div class="seccion-titulo"><h2>Últimos movimientos</h2></div>' + listaMovs(movsDe((m) => m.sobre === s.id || m.sobre2 === s.id, 10)) + '</div>';
       y += '<button class="btn sec" data-a="hoja" data-h="sobre-editar" data-esp="' + h.esp + '" data-id="' + s.id + '" data-apilar="1">' + I.edit + ' Editar sobre</button>';
       return y;
@@ -261,7 +261,7 @@
     render: (h) => {
       const c = App.calc(); const e = App.espacio(h.esp); const s = e && e.sobres.find((x) => x.id === h.id);
       if (!s) return '';
-      const pend = c.sob[s.id].porCubrir || 0;
+      const pend = App.porCubrir(s, c.sob[s.id]);
       if (!(pend > 0.004)) return '<p class="nota" style="text-align:center;padding:18px 0">✅ ' + U.esc(s.nombre) + ' ya está cubierto.</p>';
       const fuentes = fuentesCubrir(c, s);
       const varios = App.state.espacios.length > 1;

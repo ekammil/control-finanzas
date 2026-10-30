@@ -740,6 +740,27 @@
     return Object.assign(x, { nivel: 'poco', texto: ct.nombre + ': te queda' + (x.disp === 1 ? '' : 'n') + ' ' + U.money(x.disp) + ' ' + de + ' (' + Math.round(x.pct) + '%)' });
   };
   // Todas las alertas activas (para "Para ti")
+  /* Lo que te pasaste en un sobre y todavía no cubres: lo que dejó lo libre en negativo, o lo que gastaste
+     de más este ciclo (menos lo que ya moviste a mano a ese sobre desde otro sobre) */
+  App.porCubrir = (s, st) => {
+    if (!s || !st) return 0;
+    if (st.porCubrir > 0.004) return st.porCubrir;
+    if (!(s.tipo === 'gasto' || s.tipo === 'limite')) return 0;
+    const M = s.fechaPago ? st.M : st.Mc;
+    if (!(M > 0)) return 0;
+    const pasado = st.gastadoCiclo - M;
+    if (!(pasado > 0.004)) return 0;
+    // el gasto con el que te pasaste: solo cuenta lo que moviste a mano después de ese gasto
+    const ini = st.cIni || '0000-00-00';
+    const orden = (a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : (a.creado || 0) - (b.creado || 0));
+    const gastos = App.state.movs.filter((m) => m.tipo === 'gasto' && m.sobre === s.id && !m.diferido && m.fecha >= ini && m.fecha <= U.today()).sort(orden);
+    let acum = 0; let g = null;
+    for (const m of gastos) { acum += Number(m.monto); if (acum > M + 0.004) { g = m; break; } }
+    if (!g) return 0;
+    const ya = App.state.movs.reduce((t, m) => t + (m.tipo === 'mover' && m.sobre2 === s.id && m.origen !== 'auto' && (m.sobre || m.espacio !== m.espacio2) && orden(m, g) > 0 ? Number(m.monto) : 0), 0);
+    return U.r2(Math.max(0, pasado - ya));
+  };
+
   App.alertas = (c) => {
     const out = [];
     App.state.espacios.forEach((e) => e.sobres.forEach((s) => { const al = App.alertaSobre(s, c.sob[s.id]); if (al) out.push(Object.assign(al, { tipo: 'sobre', s, e })); }));
