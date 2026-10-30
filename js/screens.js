@@ -23,7 +23,7 @@
     h += '<div class="top"><div class="saludo">' + U.saludo() + nombre + '</div>' +
       '<div style="display:flex;gap:8px">' +
       (S.ajustes.pin ? '<button class="icon-btn" data-a="bloquear" aria-label="Bloquear">' + I.lock + '</button>' : '') +
-      '<button class="icon-btn campana" data-a="hoja" data-h="avisos" aria-label="Notificaciones">' + I.bell + (avisos.length ? '<i class="punto">' + (avisos.length > 9 ? '9+' : avisos.length) + '</i>' : '') + '</button>' +
+      '<button class="icon-btn campana" data-a="hoja" data-h="avisos" aria-label="Notificaciones">' + I.bell + (App.nAvisos ? '<i class="punto">' + (App.nAvisos > 9 ? '9+' : App.nAvisos) + '</i>' : '') + '</button>' +
       '<button class="icon-btn" data-a="hoja" data-h="cuadre" aria-label="Cuadrar">' + I.scale + '</button></div></div>';
 
     h += '<div class="hero"><div class="etiqueta">Disponible</div>' +
@@ -86,8 +86,17 @@
 
   /* Avisos inteligentes del inicio */
   App.avisos = (c) => {
+    // avisos que se pueden quitar (los de pagos, tarjeta y límites de sobre no)
+    const quitados = App.state.ajustes.avisosQuitados || {};
+    App.quitables = [];
+    const quitable = (k, html) => {
+      if (quitados[k] === U.today()) return;
+      App.quitables.push(k);
+      out.push(html.replace('<div class="txt">', '<button class="aviso-x" data-a="aviso-quitar" data-k="' + k + '" aria-label="Quitar">✕</button><div class="txt">'));
+    };
     const S = App.state;
     const out = [];
+    const prio = []; // importantes: pagos, tarjeta y límites de sobre (no se quitan, solo se esconden)
     const hoy = U.today();
     // bandeja de Apple Pay
     S.bandeja.forEach((b) => {
@@ -97,9 +106,10 @@
     // alertas: sobres o tarjetas en las que te pasaste o te queda poco
     App.alertas(c).slice(0, 4).forEach((al) => {
       const ver = al.tipo === 'sobre' ? 'data-h="sobre" data-esp="' + al.e.id + '" data-id="' + al.s.id + '"' : 'data-h="cuenta" data-id="' + al.ct.id + '"';
+      if (al.tipo === 'sobre' && al.nivel === 'pasado' && !(App.porCubrir(al.s, c.sob[al.s.id]) > 0.004)) return; // ya lo cubriste
       const titulo = al.tipo === 'sobre' ? U.esc(al.s.icono + ' ' + al.s.nombre) : '💳 ' + U.esc(al.ct.nombre);
-      const det = al.tipo === 'sobre' ? al.corto + (al.nivel === 'pasado' && !(App.porCubrir(al.s, c.sob[al.s.id]) > 0.004) ? ' · ya lo cubriste ✓' : '') : al.nivel === 'pasado' ? 'Te pasaste ' + U.money(-al.disp) + ' ' + (al.propio ? 'de tu límite de uso (' + U.money0(al.L) + ')' : 'del límite (' + U.money0(al.L) + ')') : 'Te queda' + (al.disp === 1 ? '' : 'n') + ' ' + U.money(al.disp) + ' de ' + U.money0(al.L) + (al.propio ? ' (tu límite de uso)' : ' de crédito') + ' · ' + Math.round(al.pct) + '%';
-      out.push('<div class="aviso al-' + al.nivel + '"><div class="ico">' + (al.nivel === 'pasado' ? '🚨' : '⚠️') + '</div><div class="txt"><b>' + titulo + (al.nivel === 'pasado' ? ' · te pasaste' : ' · queda poco') + '</b><p>' + det + '</p>' +
+      const det = al.tipo === 'sobre' ? al.corto : al.nivel === 'pasado' ? 'Te pasaste ' + U.money(-al.disp) + ' ' + (al.propio ? 'de tu límite de uso (' + U.money0(al.L) + ')' : 'del límite (' + U.money0(al.L) + ')') : 'Te queda' + (al.disp === 1 ? '' : 'n') + ' ' + U.money(al.disp) + ' de ' + U.money0(al.L) + (al.propio ? ' (tu límite de uso)' : ' de crédito') + ' · ' + Math.round(al.pct) + '%';
+      prio.push('<div class="aviso al-' + al.nivel + '"><div class="ico">' + (al.nivel === 'pasado' ? '🚨' : '⚠️') + '</div><div class="txt"><b>' + titulo + (al.nivel === 'pasado' ? ' · te pasaste' : ' · queda poco') + '</b><p>' + det + '</p>' +
         '<i class="ir-barra"><i style="transform:scaleX(' + Math.max(0, Math.min(1, al.pct / 100)).toFixed(3) + ')" class="bajo"></i></i>' +
         '<div class="acciones">' + (al.tipo === 'sobre' && App.porCubrir(al.s, c.sob[al.s.id]) > 0.004 ? '<button class="btn-chico blanco" data-a="hoja" data-h="cubrir" data-esp="' + al.e.id + '" data-id="' + al.s.id + '">Cubrir con…</button><button class="btn-chico" data-a="hoja" ' + ver + '>Ver</button>' : '<button class="btn-chico blanco" data-a="hoja" ' + ver + '>Ver</button><button class="btn-chico" data-a="hoja" data-h="alertas">Ajustar alertas</button>') + '</div></div></div>');
     });
@@ -107,7 +117,7 @@
     const ini = U.weekStart(hoy);
     if (S.ajustes.ultimoResumen && S.ajustes.ultimoResumen < ini && S.movs.length) {
       const r = App.resumenSemana(U.addDays(ini, -7));
-      out.push('<div class="aviso"><div class="ico">📊</div><div class="txt"><b>Tu semana pasada</b><p>Gastaste ' + U.money0(r.flujo.gas) + ' e ingresaste ' + U.money0(r.flujo.ing) + '.' + (r.pasados.length ? ' ' + r.pasados.length + ' sobre(s) en rojo.' : ' Ningún sobre en rojo. 👏') + '</p>' +
+      quitable('semana-' + ini, '<div class="aviso"><div class="ico">📊</div><div class="txt"><b>Tu semana pasada</b><p>Gastaste ' + U.money0(r.flujo.gas) + ' e ingresaste ' + U.money0(r.flujo.ing) + '.' + (r.pasados.length ? ' ' + r.pasados.length + ' sobre(s) en rojo.' : ' Ningún sobre en rojo. 👏') + '</p>' +
         '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" data-h="resumen">Ver resumen</button><button class="btn-chico" data-a="resumen-ok">Listo</button></div></div></div>');
     }
     // pagos próximos
@@ -123,17 +133,17 @@
       const boton = p.tipo === 'rec' ? '<button class="btn-chico blanco" data-a="pagar-rec" data-id="' + p.r.id + '" data-f="' + p.fecha + '">Registrar pago</button>'
         : p.tipo === 'tarjeta' ? '<button class="btn-chico blanco" data-a="pagar-tarjeta" data-id="' + p.r.cuenta + '">Pagar tarjeta</button>'
           : '<button class="btn-chico blanco" data-a="pagar-sobre" data-esp="' + p.r.espacio + '" data-id="' + p.r.id + '" data-f="' + (p.tipo === 'sobre' ? p.fecha : '') + '" data-monto="' + p.r.monto + '">Registrar pago</button>';
-      out.push('<div class="aviso"><div class="ico">' + (p.tipo === 'tarjeta' ? '💳' : I.cal) + '</div><div class="txt"><b>' + U.esc(p.r.nombre) + ' · ' + U.money(p.r.monto) + '</b><p>Se paga ' + cuando + ' (' + U.fechaCorta(p.fecha) + '). ' + estado + '</p>' +
+      prio.push('<div class="aviso"><div class="ico">' + (p.tipo === 'tarjeta' ? '💳' : I.cal) + '</div><div class="txt"><b>' + U.esc(p.r.nombre) + ' · ' + U.money(p.r.monto) + '</b><p>Se paga ' + cuando + ' (' + U.fechaCorta(p.fecha) + '). ' + estado + '</p>' +
         '<div class="acciones">' + boton + '</div></div></div>');
     });
     // dinero libre sin repartir
     S.espacios.forEach((e) => {
       const x = c.esp[e.id];
       if (x.libre > 0.5 && x.falta > 0.5) {
-        out.push('<div class="aviso"><div class="ico">✨</div><div class="txt"><b>Tienes ' + U.money(x.libre) + ' libres en ' + U.esc(e.nombre) + '</b><p>A tus sobres les faltan ' + U.money(x.falta) + ' por ahora.</p>' +
+        quitable('libre-' + e.id, '<div class="aviso"><div class="ico">✨</div><div class="txt"><b>Tienes ' + U.money(x.libre) + ' libres en ' + U.esc(e.nombre) + '</b><p>A tus sobres les faltan ' + U.money(x.falta) + ' por ahora.</p>' +
           '<div class="acciones"><button class="btn-chico blanco" data-a="repartir" data-id="' + e.id + '">Repartir</button></div></div></div>');
       } else if (x.libre < -0.5) {
-        out.push('<div class="aviso"><div class="ico">⚠️</div><div class="txt"><b>' + U.esc(e.nombre) + ': libre en ' + U.money(x.libre) + '</b><p>Gastaste más de lo que tenía el sobre. Cúbrelo moviendo dinero de otro sobre al que te pasaste, o se cubre solo con tu siguiente ingreso.</p>' +
+        quitable('neg-' + e.id, '<div class="aviso"><div class="ico">⚠️</div><div class="txt"><b>' + U.esc(e.nombre) + ': libre en ' + U.money(x.libre) + '</b><p>Gastaste más de lo que tenía el sobre. Cúbrelo moviendo dinero de otro sobre al que te pasaste, o se cubre solo con tu siguiente ingreso.</p>' +
           '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" data-h="registro" data-modo="mover" data-esp="' + e.id + '">Mover dinero</button></div></div></div>');
       }
     });
@@ -141,13 +151,18 @@
     if (!S.ajustes.avisoRitmo) {
       const f = S.ajustes.frecIngreso; let n = 0;
       S.espacios.forEach((e) => e.sobres.forEach((s) => { if (s.tipo !== 'tarjeta' && s.tipo !== 'porIngreso' && U.frec(s.frecAporte || f) !== f) n++; }));
-      if (n >= 2) out.push('<div class="aviso"><div class="ico">🔁</div><div class="txt"><b>Cobras ' + U.FREC_CADA[f] + ', pero ' + n + ' sobres apartan con otro ritmo</b><p>Si apartan igual que como cobras, cada ingreso se reparte parejo y no te quedas sin dinero un día.</p>' +
+      if (n >= 2) quitable('ritmo', '<div class="aviso"><div class="ico">🔁</div><div class="txt"><b>Cobras ' + U.FREC_CADA[f] + ', pero ' + n + ' sobres apartan con otro ritmo</b><p>Si apartan igual que como cobras, cada ingreso se reparte parejo y no te quedas sin dinero un día.</p>' +
         '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" data-h="frec-ingreso">Revisar</button><button class="btn-chico" data-a="aviso-ritmo-no">Así está bien</button></div></div></div>');
     }
     // cuadre de la noche
     if (S.ajustes.cuadreNoche && new Date().getHours() >= (Number(S.ajustes.horaCuadre) || 21) && S.ajustes.ultimoCuadre !== hoy) {
-      out.push('<div class="aviso"><div class="ico">🌙</div><div class="txt"><b>Cuadre de la noche</b><p>Revisa en 1 minuto que tu dinero real coincida.</p>' +
+      quitable('cuadre', '<div class="aviso"><div class="ico">🌙</div><div class="txt"><b>Cuadre de la noche</b><p>Revisa en 1 minuto que tu dinero real coincida.</p>' +
         '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" data-h="cuadre">Cuadrar</button><button class="btn-chico" data-a="cuadre-saltar">Hoy no</button></div></div></div>');
+    }
+    App.nAvisos = prio.length + out.length;
+    if (prio.length) {
+      const oculto = !!S.ajustes.prioOculto;
+      out.unshift('<div class="prio' + (oculto ? ' oculto' : '') + '"><button class="prio-tab" data-a="prio-toggle"><b>⭐ Importantes</b><i class="prio-n">' + prio.length + '</i><span>' + (oculto ? 'Ver ›' : 'Esconder ⌃') + '</span></button>' + (oculto ? '' : prio.join('')) + '</div>');
     }
     return out;
   };

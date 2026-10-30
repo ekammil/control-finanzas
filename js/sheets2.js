@@ -594,6 +594,7 @@
       const a = App.state.ajustes; const c = App.calc();
       const avisos = App.avisos(c);
       let y = avisos.length ? avisos.join('') : '<div class="nota" style="text-align:center;padding:18px 0">🔔 Todo en orden. No tienes avisos por ahora.</div>';
+      if ((App.quitables || []).length) y += '<button class="btn sec" style="margin-top:10px" data-a="avisos-limpiar">🧹 Quitar los avisos que se pueden quitar</button><p class="nota" style="margin-top:4px">Los de pagos, tarjeta y límites de sobre se quedan hasta que se resuelvan.</p>';
       y += '<div class="etq" style="margin-top:22px">Notificaciones del celular</div>';
       const soporta = 'Notification' in window;
       if (!soporta) y += '<p class="nota">En iPhone primero agrega la app a tu pantalla de inicio (Compartir → Agregar a inicio) y ábrela desde ahí. Necesitas iOS 16.4 o más nuevo.</p>';

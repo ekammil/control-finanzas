@@ -147,6 +147,9 @@
 
     /* cuadre */
     'cuadre-guardar': () => App.guardarCuadre(),
+    'prio-toggle': () => { App.state.ajustes.prioOculto = !App.state.ajustes.prioOculto; App.save(); U.haptic(); if (App.h) App.renderHoja(); App.render(); },
+    'aviso-quitar': (el) => { App.quitarAvisos([el.dataset.k]); },
+    'avisos-limpiar': () => { App.quitarAvisos((App.quitables || []).slice()); App.toast('Listo, quité los avisos que se podían quitar', 'ok'); },
     'cubrir-de': (el) => { App.h.de = el.dataset.v || ''; App.renderHoja(); },
     'cubrir-ok': () => {
       const h = App.h; const c = App.calc(); const e = App.espacio(h.esp); const s = e && e.sobres.find((x) => x.id === h.id);
@@ -553,6 +556,20 @@
     };
     sp.addEventListener('pointerdown', salir, { once: true });
     setTimeout(salir, App.ui.bloqueado ? 1100 : 1500);
+  };
+
+  // quita avisos por hoy (si siguen pendientes, vuelven mañana); el resumen y el cuadre se dan por vistos
+  App.quitarAvisos = (ks) => {
+    const a = App.state.ajustes; const hoy = U.today();
+    const q = Object.assign({}, a.avisosQuitados || {});
+    Object.keys(q).forEach((k) => { if (q[k] !== hoy) delete q[k]; });
+    ks.forEach((k) => {
+      q[k] = hoy;
+      if (k.indexOf('semana-') === 0) a.ultimoResumen = hoy;
+      if (k === 'cuadre') a.ultimoCuadre = hoy;
+    });
+    a.avisosQuitados = q; App.save(); U.haptic();
+    if (App.h) App.renderHoja(); App.render();
   };
 
   /* ---------------- reparto automático ----------------
