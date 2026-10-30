@@ -542,6 +542,31 @@
   };
 
   /* ---------- Alertas ---------- */
+  /* Campanita: los mismos avisos de "Para ti" y las notificaciones del celular */
+  H.avisos = {
+    titulo: 'Notificaciones',
+    render: () => {
+      const a = App.state.ajustes; const c = App.calc();
+      const avisos = App.avisos(c);
+      let y = avisos.length ? avisos.join('') : '<div class="nota" style="text-align:center;padding:18px 0">🔔 Todo en orden. No tienes avisos por ahora.</div>';
+      y += '<div class="etq" style="margin-top:22px">Notificaciones del celular</div>';
+      const soporta = 'Notification' in window;
+      if (!soporta) y += '<p class="nota">En iPhone primero agrega la app a tu pantalla de inicio (Compartir → Agregar a inicio) y ábrela desde ahí. Necesitas iOS 16.4 o más nuevo.</p>';
+      else if (Notification.permission === 'denied') y += '<p class="nota cuidado">Las notificaciones están bloqueadas. Actívalas en Ajustes del iPhone → Notificaciones → esta app.</p>';
+      else if (Notification.permission !== 'granted') y += '<button class="btn" data-a="notif-activar">🔔 Activar notificaciones</button>';
+      const sw = (k, t, sub) => '<label class="interruptor"><div class="txt"><b>' + t + '</b><small>' + sub + '</small></div><span class="sw"><input type="checkbox" data-sw="' + k + '" ' + (a[k] !== false ? 'checked' : '') + '><i></i></span></label>';
+      if (soporta && Notification.permission === 'granted') {
+        y += sw('notifPagos', '💳 Pagos que se acercan', 'Tarjeta, renta, suscripciones: 2 días antes, 1 día antes y el mismo día') +
+          sw('notifCuadre', '🌙 Recordatorio de cuadre', 'Si a esa hora no has cuadrado tu dinero') +
+          sw('notifPasado', '⚠️ Te pasaste de un sobre', 'Una vez por sobre, cuando te pasas de lo planeado') +
+          sw('notifLibre', '✨ Dinero sin repartir', 'Si hay dinero libre y a tus sobres les falta (cuando no se reparte solo)');
+      }
+      y += '<div class="etq">Hora del cuadre</div><div class="chips">' + [20, 21, 22].map((hr) => chip(Number(a.horaCuadre || 21) === hr, 'hora-cuadre', 'data-v="' + hr + '"', App.horaTxt(hr))).join('') + '</div>';
+      y += '<p class="nota">Sin servidor, las notificaciones salen cuando abres la app o mientras la tienes abierta (aunque estés en otra pantalla). No se repiten: cada aviso llega una sola vez.</p>';
+      return y;
+    }
+  };
+
   H.alertas = {
     titulo: 'Alertas',
     init: () => ({ sobreP: String(App.state.ajustes.alertaSobre), tarjetaP: String(App.state.ajustes.alertaTarjeta) }),

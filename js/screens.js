@@ -18,10 +18,12 @@
     const nombre = S.perfil.nombre ? ', <b>' + U.esc(S.perfil.nombre) + '</b>' : '';
     const ancho = Math.min(window.innerWidth || 400, 560);
 
+    const avisos = App.avisos(c);
     let h = '<div class="pantalla">';
     h += '<div class="top"><div class="saludo">' + U.saludo() + nombre + '</div>' +
       '<div style="display:flex;gap:8px">' +
       (S.ajustes.pin ? '<button class="icon-btn" data-a="bloquear" aria-label="Bloquear">' + I.lock + '</button>' : '') +
+      '<button class="icon-btn campana" data-a="hoja" data-h="avisos" aria-label="Notificaciones">' + I.bell + (avisos.length ? '<i class="punto">' + (avisos.length > 9 ? '9+' : avisos.length) + '</i>' : '') + '</button>' +
       '<button class="icon-btn" data-a="hoja" data-h="cuadre" aria-label="Cuadrar">' + I.scale + '</button></div></div>';
 
     h += '<div class="hero"><div class="etiqueta">Disponible</div>' +
@@ -40,7 +42,6 @@
     h += '<div class="rangos">' + ['hoy', 'semana', 'mes'].map((r) => '<button class="' + (r === rango ? 'on' : '') + '" data-a="rango" data-r="' + r + '">' + { hoy: 'Hoy', semana: 'Semana', mes: 'Mes' }[r] + '</button>').join('') + '</div>';
 
     // avisos
-    const avisos = App.avisos(c);
     if (avisos.length) h += '<div class="seccion"><div class="seccion-titulo"><h2>Para ti</h2></div>' + avisos.join('') + '</div>';
 
     // semana
@@ -132,7 +133,8 @@
         out.push('<div class="aviso"><div class="ico">✨</div><div class="txt"><b>Tienes ' + U.money(x.libre) + ' libres en ' + U.esc(e.nombre) + '</b><p>A tus sobres les faltan ' + U.money(x.falta) + ' por ahora.</p>' +
           '<div class="acciones"><button class="btn-chico blanco" data-a="repartir" data-id="' + e.id + '">Repartir</button></div></div></div>');
       } else if (x.libre < -0.5) {
-        out.push('<div class="aviso"><div class="ico">⚠️</div><div class="txt"><b>' + U.esc(e.nombre) + ': libre en ' + U.money(x.libre) + '</b><p>Gastaste más de lo que tenías libre. Se cubre con tu siguiente ingreso.</p></div></div>');
+        out.push('<div class="aviso"><div class="ico">⚠️</div><div class="txt"><b>' + U.esc(e.nombre) + ': libre en ' + U.money(x.libre) + '</b><p>Gastaste más de lo que tenía el sobre. Cúbrelo moviendo dinero de otro sobre al que te pasaste, o se cubre solo con tu siguiente ingreso.</p>' +
+          '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" data-h="registro" data-modo="mover" data-esp="' + e.id + '">Mover dinero</button></div></div></div>');
       }
     });
     // sobres que apartan con otro ritmo distinto a cuando cobras (ej. cobras diario y apartan cada semana)
@@ -143,7 +145,7 @@
         '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" data-h="frec-ingreso">Revisar</button><button class="btn-chico" data-a="aviso-ritmo-no">Así está bien</button></div></div></div>');
     }
     // cuadre de la noche
-    if (S.ajustes.cuadreNoche && new Date().getHours() >= 20 && S.ajustes.ultimoCuadre !== hoy) {
+    if (S.ajustes.cuadreNoche && new Date().getHours() >= (Number(S.ajustes.horaCuadre) || 21) && S.ajustes.ultimoCuadre !== hoy) {
       out.push('<div class="aviso"><div class="ico">🌙</div><div class="txt"><b>Cuadre de la noche</b><p>Revisa en 1 minuto que tu dinero real coincida.</p>' +
         '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" data-h="cuadre">Cuadrar</button><button class="btn-chico" data-a="cuadre-saltar">Hoy no</button></div></div></div>');
     }
@@ -269,7 +271,9 @@
       fila('hoja', I.cal, 'Cada cuánto recibes dinero', U.FREC_TXT[a.frecIngreso] || 'Semanal', 'data-h="frec-ingreso"') +
       fila('ir', I.target, 'Próximos pagos', 'Fechas de pago y avisos', 'data-p="metas"') + '</div>';
     h += '<div class="seccion"><div class="seccion-titulo"><h2>Hábitos</h2></div>' +
-      sw('cuadreNoche', 'Cuadre de la noche', 'Después de las 8 pm te sugiere revisar tu dinero real') +
+      sw('cuadreNoche', 'Cuadre de la noche', 'Desde las ' + App.horaTxt(a.horaCuadre) + ' te sugiere revisar tu dinero real') +
+      sw('repartirSolo', 'Repartir solo', 'Lo que te entre y lo que quede libre se aparta solo en tus sobres') +
+      fila('hoja', I.bell, 'Notificaciones', App.notifPermitidas() ? 'Activadas' : 'Avisos en el celular', 'data-h="avisos"') +
       fila('hoja', I.bell, 'Alertas', a.alertas === false ? 'Desactivadas' : 'Sobres al ' + a.alertaSobre + '% · tarjetas al ' + a.alertaTarjeta + '%', 'data-h="alertas"') +
       sw('sonidos', 'Sonidos', 'Al gastar, al recibir dinero y en alertas') +
       sw('vibracion', 'Vibración', 'Al guardar y en alertas') + '</div>';

@@ -147,6 +147,8 @@
 
     /* cuadre */
     'cuadre-guardar': () => App.guardarCuadre(),
+    'notif-activar': () => App.pedirNotifs(),
+    'hora-cuadre': (el) => { App.state.ajustes.horaCuadre = Number(el.dataset.v); App.save(); App.programarCuadre(); App.renderHoja(); },
     'cuadre-saltar': () => { App.state.ajustes.ultimoCuadre = U.today(); App.save(); refrescar(); },
 
     /* avisos */
@@ -511,6 +513,7 @@
     if (App.state.ajustes.pin && ocultoDesde && Date.now() - ocultoDesde > 60000) { App.ui.bloqueado = true; App.ui.pinIn = ''; App.cerrarHoja(true); }
     const hechos = App.cierreSemanal();
     if (hechos.length) App.toast('Sobrantes: ' + hechos.map((x) => x.de + ' → ' + x.a + ' ' + U.money0(x.monto)).join(', '), 'largo');
+    despuesDeAbrir();
     if (!App.h) App.render();
     App.sync.auto();
   });
@@ -538,6 +541,80 @@
     setTimeout(salir, App.ui.bloqueado ? 1100 : 1500);
   };
 
+  /* ---------------- reparto automático ----------------
+     Lo libre de cada espacio se aparta solo en lo que les falta a los sobres (al abrir la app y al volver a ella). */
+  App.autoRepartir = () => {
+    const S = App.state;
+    if (S.ajustes.repartirSolo === false || S.ajustes.onboarding || !S.cuentas.length) return 0;
+    let total = 0;
+    S.espacios.forEach((e) => {
+      const x = App.calc().esp[e.id];
+      if (!x || !(x.libre > 0.5) || !(x.falta > 0.5)) return;
+      const r = App.repartir(e.id, U.today(), false);
+      if (r) total += r.partes.reduce((t, p) => t + p.monto, 0);
+    });
+    if (total > 0.004) { App.save(); }
+    return U.r2(total);
+  };
+
+  /* ---------------- notificaciones del celular ----------------
+     Sin servidor: salen al abrir la app o mientras está abierta. Cada aviso se manda una sola vez. */
+  App.horaTxt = (h) => { h = Number(h) || 21; return (h > 12 ? h - 12 : h) + ':00 ' + (h >= 12 ? 'pm' : 'am'); };
+  App.notifPermitidas = () => 'Notification' in window && Notification.permission === 'granted';
+  const NK = 'cdf-notifs';
+  const leerYa = () => { try { return JSON.parse(localStorage.getItem(NK) || '{}'); } catch (e) { return {}; } };
+  const notificar = async (id, titulo, cuerpo) => {
+    const ya = leerYa(); const hoy = U.today();
+    if (ya[id]) return;
+    ya[id] = hoy;
+    Object.keys(ya).forEach((k) => { if (ya[k] < U.addDays(hoy, -60)) delete ya[k]; });
+    try { localStorage.setItem(NK, JSON.stringify(ya)); } catch (e) { return; }
+    const op = { body: cuerpo, tag: id, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png' };
+    try { const reg = await navigator.serviceWorker.ready; await reg.showNotification(titulo, op); } catch (e) { try { new Notification(titulo, op); } catch (e2) { /* sin soporte */ } }
+  };
+  App.revisarNotifs = () => {
+    const S = App.state; const a = S.ajustes;
+    if (!App.notifPermitidas() || a.onboarding || !S.cuentas.length) return;
+    const c = App.calc(); const hoy = U.today();
+    if (a.notifPagos !== false) App.proximosPagos(c).forEach((p) => {
+      if (p.dias < 0 || p.dias > 2) return;
+      const cuando = p.dias === 0 ? 'hoy' : p.dias === 1 ? 'mañana' : 'en 2 días';
+      notificar('pago-' + p.r.id + '-' + p.fecha + '-' + p.dias, (p.tipo === 'tarjeta' ? '💳 ' : '📅 ') + p.r.nombre + ': pago ' + cuando, 'Te toca pagar ' + U.money(p.r.monto) + (p.dias ? ' el ' + U.fechaCorta(p.fecha) : '') + '. Toca para ver si ya lo tienes juntado.');
+    });
+    if (a.notifPasado !== false) App.alertas(c).forEach((al) => {
+      if (al.tipo !== 'sobre' || al.nivel !== 'pasado') return;
+      const st = c.sob[al.s.id];
+      notificar('pasado-' + al.s.id + '-' + (st.cIni || hoy), '⚠️ Te pasaste en ' + al.s.nombre, al.corto + '. Puedes cubrirlo moviendo dinero de otro sobre.');
+    });
+    if (a.notifCuadre !== false && new Date().getHours() >= (Number(a.horaCuadre) || 21) && a.ultimoCuadre !== hoy)
+      notificar('cuadre-' + hoy, '🌙 Hora de tu cuadre', 'Revisa en 1 minuto que tu dinero real coincida con la app.');
+    if (a.notifLibre !== false && a.repartirSolo === false) S.espacios.forEach((e) => {
+      const x = c.esp[e.id];
+      if (x && x.libre > 0.5 && x.falta > 0.5) notificar('libre-' + e.id + '-' + hoy, '✨ Tienes ' + U.money(x.libre) + ' sin repartir', 'En ' + e.nombre + ' a tus sobres les faltan ' + U.money(x.falta) + '.');
+    });
+  };
+  App.pedirNotifs = async () => {
+    if (!('Notification' in window)) { App.toast('Primero agrega la app a tu pantalla de inicio y ábrela desde ahí', 'largo'); return; }
+    const r = await Notification.requestPermission();
+    if (r === 'granted') { App.toast('🔔 Notificaciones activadas', 'ok'); App.revisarNotifs(); }
+    else App.toast('No se activaron. Puedes cambiarlo en Ajustes del iPhone → Notificaciones', 'largo');
+    if (App.h) App.renderHoja();
+  };
+  // mientras la app está abierta: revisa cada 15 minutos y justo a la hora del cuadre
+  let tCuadre = null;
+  App.programarCuadre = () => {
+    clearTimeout(tCuadre);
+    const h = Number(App.state.ajustes.horaCuadre) || 21; const ahora = new Date(); const meta = new Date(); meta.setHours(h, 0, 5, 0);
+    if (meta > ahora) tCuadre = setTimeout(() => { App.revisarNotifs(); if (!App.h) App.render(); }, meta - ahora);
+  };
+  setInterval(() => { if (!document.hidden) App.revisarNotifs(); }, 15 * 60000);
+  const despuesDeAbrir = () => {
+    const rep = App.autoRepartir();
+    if (rep > 0) setTimeout(() => App.toast('✨ Aparté ' + U.money(rep) + ' en tus sobres', 'ok'), 900);
+    setTimeout(App.revisarNotifs, 2500);
+    App.programarCuadre();
+  };
+
   App.iniciar = () => {
     App.load();
     if (App.state.ajustes.pin) App.ui.bloqueado = true;
@@ -545,6 +622,7 @@
       const hechos = App.cierreSemanal();
       if (hechos.length) setTimeout(() => App.toast('Sobrantes: ' + hechos.map((x) => x.de + ' → ' + x.a + ' ' + U.money0(x.monto)).join(', '), 'largo'), 800);
     }
+    if (!App.state.ajustes.onboarding && App.state.cuentas.length) despuesDeAbrir();
     App.render();
     App.splash();
     App.persistir();

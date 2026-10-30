@@ -272,8 +272,12 @@
             if (monto > hay + 0.004) return App.toast('Solo tienes ' + U.money(hay) + ' libres' + (App.state.espacios.length > 1 ? ' en ' + App.espacio(h.espacio).nombre : ''), 'error');
           }
         }
+        const libreAntes = App.calc().esp[h.espacio2] ? App.calc().esp[h.espacio2].libre : 0;
         App.addMov({ tipo: 'mover', monto, espacio: h.espacio, sobre: h.deSobre, espacio2: h.espacio2, sobre2: h.sobre2, nota: h.nota, fecha: h.fecha });
-        App.toast('Dinero movido: ' + U.money(monto), 'ok');
+        const c2 = App.calc(); const cubrio = c2.esp[h.espacio2] ? U.r2(c2.esp[h.espacio2].libre - libreAntes - (h.espacio !== h.espacio2 && !h.sobre2 ? monto : 0)) : 0;
+        const ds = h.sobre2 ? App.sobre(h.espacio2, h.sobre2) : null;
+        if (h.sobre2 && cubrio > 0.004) App.toast('✅ Cubriste ' + U.money(cubrio) + ' que te pasaste' + (ds ? ' en ' + ds.nombre : '') + (monto - cubrio > 0.004 ? ' · ' + U.money(monto - cubrio) + ' quedan en el sobre' : ''), 'ok');
+        else App.toast('Dinero movido: ' + U.money(monto), 'ok');
       }
     } else {
       if (!h.cuenta) return App.toast('Elige una cuenta', 'error');

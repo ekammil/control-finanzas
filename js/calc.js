@@ -16,6 +16,7 @@
       sob[s.id] = 0; sobEsp[s.id] = e.id;
       if (s.tipo === 'tarjeta') tarjetaDe[e.id + '|' + s.cuenta] = s.id;
     }));
+    const exc = {}; // lo que cada sobre se pasó y salió de lo libre (sin cubrir todavía)
     const valido = (espId, sobreId) => sobreId && sob[sobreId] !== undefined && sobEsp[sobreId] === espId;
     const parte = (id, sub, v) => { if (partes[id]) partes[id][sub === 'm' ? 'm' : 'b'] += v; };
 
@@ -34,6 +35,7 @@
         } else if (t === 'gasto' && valido(m.espacio, m.sobre)) {
           const de = Math.min(Math.max(sob[m.sobre], 0), v);
           sob[m.sobre] -= de;
+          if (v - de > 0.004) exc[m.sobre] = (exc[m.sobre] || 0) + v - de; // lo que se pasó sale de lo libre
           if (w) { w.gasto(m, v - de, false); w.saldo(m.sobre, m.fecha, sob[m.sobre]); }
         } else if (t === 'gasto') {
           if (w) w.gasto(m, 0, false);
@@ -47,6 +49,8 @@
         return;
       }
       if (t === 'mover') {
+        const libreDe = (eid) => esp[eid] - Object.keys(sob).reduce((t2, k) => t2 + (sobEsp[k] === eid ? sob[k] : 0), 0);
+        const libreAntes = (exc[m.sobre2] || 0) > 0.004 && esp[m.espacio2] !== undefined ? libreDe(m.espacio2) : 0;
         if (esp[m.espacio] !== undefined) esp[m.espacio] -= v;
         if (esp[m.espacio2] !== undefined) esp[m.espacio2] += v;
         if (valido(m.espacio, m.sobre)) {
@@ -55,8 +59,15 @@
           if (w) w.saldo(m.sobre, m.fecha, sob[m.sobre]);
         }
         if (valido(m.espacio2, m.sobre2)) {
-          sob[m.sobre2] += v;
-          if (w) { w.apartado(m.sobre2, m, v); w.saldo(m.sobre2, m.fecha, sob[m.sobre2]); }
+          // si a este sobre ya te pasaste y eso dejó lo libre en negativo, lo que muevas desde otro sobre
+          // (u otro espacio) primero cubre ese exceso; lo que quede sí entra al sobre
+          let cubre = 0;
+          if ((exc[m.sobre2] || 0) > 0.004 && (valido(m.espacio, m.sobre) || m.espacio !== m.espacio2)) {
+            cubre = Math.max(0, Math.min(v, exc[m.sobre2], -libreAntes));
+            exc[m.sobre2] -= cubre;
+          }
+          sob[m.sobre2] += v - cubre;
+          if (w) { if (v - cubre > 0.004) w.apartado(m.sobre2, m, v - cubre); if (cubre > 0.004) w.cubre(m.sobre2, m, cubre); w.saldo(m.sobre2, m.fecha, sob[m.sobre2]); }
         }
       }
     }
@@ -342,6 +353,7 @@
         if (por) por.forEach((p) => L[sobreId].ev.push({ f: p[0], ap: p[1] }));
         else L[sobreId].ev.push({ f: m.fecha, ap: v });
       },
+      cubre(sobreId, m, v) { if (st[sobreId]) st[sobreId].cubiertoSemana = (st[sobreId].cubiertoSemana || 0) + v; },
       dif(sobreId, m, v) { if (L[sobreId]) L[sobreId].ev.push({ f: m.fecha, dif: v, meses: m.meses || 1 }); },
       saldo(sobreId, f, v) {
         const l = L[sobreId]; if (!l) return;
