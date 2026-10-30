@@ -101,7 +101,7 @@
       const det = al.tipo === 'sobre' ? al.corto : al.nivel === 'pasado' ? 'Te pasaste ' + U.money(-al.disp) + ' ' + (al.propio ? 'de tu límite de uso (' + U.money0(al.L) + ')' : 'del límite (' + U.money0(al.L) + ')') : 'Te queda' + (al.disp === 1 ? '' : 'n') + ' ' + U.money(al.disp) + ' de ' + U.money0(al.L) + (al.propio ? ' (tu límite de uso)' : ' de crédito') + ' · ' + Math.round(al.pct) + '%';
       out.push('<div class="aviso al-' + al.nivel + '"><div class="ico">' + (al.nivel === 'pasado' ? '🚨' : '⚠️') + '</div><div class="txt"><b>' + titulo + (al.nivel === 'pasado' ? ' · te pasaste' : ' · queda poco') + '</b><p>' + det + '</p>' +
         '<i class="ir-barra"><i style="transform:scaleX(' + Math.max(0, Math.min(1, al.pct / 100)).toFixed(3) + ')" class="bajo"></i></i>' +
-        '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" ' + ver + '>Ver</button><button class="btn-chico" data-a="hoja" data-h="alertas">Ajustar alertas</button></div></div></div>');
+        '<div class="acciones">' + (al.tipo === 'sobre' && c.sob[al.s.id] && c.sob[al.s.id].porCubrir > 0.004 ? '<button class="btn-chico blanco" data-a="hoja" data-h="cubrir" data-esp="' + al.e.id + '" data-id="' + al.s.id + '">Cubrir con…</button><button class="btn-chico" data-a="hoja" ' + ver + '>Ver</button>' : '<button class="btn-chico blanco" data-a="hoja" ' + ver + '>Ver</button><button class="btn-chico" data-a="hoja" data-h="alertas">Ajustar alertas</button>') + '</div></div></div>');
     });
     // resumen semanal (lunes o primer día que abras la semana)
     const ini = U.weekStart(hoy);

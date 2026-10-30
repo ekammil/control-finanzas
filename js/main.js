@@ -147,6 +147,20 @@
 
     /* cuadre */
     'cuadre-guardar': () => App.guardarCuadre(),
+    'cubrir-de': (el) => { App.h.de = el.dataset.v || ''; App.renderHoja(); },
+    'cubrir-ok': () => {
+      const h = App.h; const c = App.calc(); const e = App.espacio(h.esp); const s = e && e.sobres.find((x) => x.id === h.id);
+      const f = s && App.fuentesCubrir(c, s).find((x) => x.o.id === h.de);
+      if (!s || !f) return;
+      const pend = c.sob[s.id].porCubrir || 0; const monto = U.r2(Math.min(pend, f.saldo));
+      if (!(monto > 0.004)) return;
+      App.addMov({ tipo: 'mover', monto, espacio: f.e.id, sobre: f.o.id, espacio2: e.id, sobre2: s.id, nota: 'Cubrir lo que me pasé en ' + s.nombre });
+      U.haptic();
+      const resta = U.r2(pend - monto);
+      if (resta > 0.004) { h.de = ''; App.renderHoja(); App.toast('✅ Cubriste ' + U.money(monto) + '. Faltan ' + U.money(resta) + ': elige otro sobre', 'largo'); }
+      else { App.cerrarHoja(); App.toast('✅ Cubriste ' + U.money(monto) + ' con ' + f.o.nombre + ' · le quedan ' + U.money(f.saldo - monto), 'ok'); }
+      refrescar();
+    },
     'notif-activar': () => App.pedirNotifs(),
     'hora-cuadre': (el) => { App.state.ajustes.horaCuadre = Number(el.dataset.v); App.save(); App.programarCuadre(); App.renderHoja(); },
     'cuadre-saltar': () => { App.state.ajustes.ultimoCuadre = U.today(); App.save(); refrescar(); },

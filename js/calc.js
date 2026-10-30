@@ -17,6 +17,7 @@
       if (s.tipo === 'tarjeta') tarjetaDe[e.id + '|' + s.cuenta] = s.id;
     }));
     const exc = {}; // lo que cada sobre se pasó y salió de lo libre (sin cubrir todavía)
+    const libreDe = (eid) => esp[eid] - Object.keys(sob).reduce((t2, k) => t2 + (sobEsp[k] === eid ? sob[k] : 0), 0);
     const valido = (espId, sobreId) => sobreId && sob[sobreId] !== undefined && sobEsp[sobreId] === espId;
     const parte = (id, sub, v) => { if (partes[id]) partes[id][sub === 'm' ? 'm' : 'b'] += v; };
 
@@ -40,6 +41,8 @@
         } else if (t === 'gasto') {
           if (w) w.gasto(m, 0, false);
         }
+        // si con este dinero lo libre ya no está en negativo, lo que te pasaste ya quedó cubierto
+        if (delta > 0 && esp[m.espacio] !== undefined && libreDe(m.espacio) >= -0.004) Object.keys(exc).forEach((k) => { if (sobEsp[k] === m.espacio) exc[k] = 0; });
         if (t === 'ingreso' && w) w.ingreso(m);
         return;
       }
@@ -49,13 +52,15 @@
         return;
       }
       if (t === 'mover') {
-        const libreDe = (eid) => esp[eid] - Object.keys(sob).reduce((t2, k) => t2 + (sobEsp[k] === eid ? sob[k] : 0), 0);
         const libreAntes = (exc[m.sobre2] || 0) > 0.004 && esp[m.espacio2] !== undefined ? libreDe(m.espacio2) : 0;
         if (esp[m.espacio] !== undefined) esp[m.espacio] -= v;
         if (esp[m.espacio2] !== undefined) esp[m.espacio2] += v;
         if (valido(m.espacio, m.sobre)) {
           const s = App.sobre(m.espacio, m.sobre);
-          sob[m.sobre] -= s && s.tipo === 'tarjeta' ? v : Math.min(Math.max(sob[m.sobre], 0), v);
+          const sale = s && s.tipo === 'tarjeta' ? v : Math.min(Math.max(sob[m.sobre], 0), v);
+          sob[m.sobre] -= sale;
+          // lo que sacas a mano de un pago con fecha se tiene que volver a juntar antes del pago
+          if (w && sale > 0.004 && m.origen !== 'auto') w.retiro(m.sobre, m, sale);
           if (w) w.saldo(m.sobre, m.fecha, sob[m.sobre]);
         }
         if (valido(m.espacio2, m.sobre2)) {
@@ -71,7 +76,7 @@
         }
       }
     }
-    return { cuentas, partes, esp, sob, sobEsp, aplicar };
+    return { cuentas, partes, esp, sob, sobEsp, aplicar, exc };
   }
 
   const esTarj = (s) => s && s.tipo === 'tarjeta';
@@ -137,7 +142,7 @@
     const fA = U.frec(s.frecAporte || App.state.ajustes.frecIngreso);
     const P = U.periodo(fA, ref);
     const o = { frecAporte: fA, cuota: 0, falta: 0, cubierto: 0, venc: '', cIni: '', cFin: '', M: 0, T: 0, constante: 0, gastadoCiclo: 0, ventana: P, pagado: 0, compras: 0 };
-    const cub = (a, b) => sumar(L, 'ap', a, b) + sumar(L, 'ex', a, b);
+    const cub = (a, b) => sumar(L, 'ap', a, b) + sumar(L, 'ex', a, b) - (s.fechaPago && (s.tipo === 'gasto' || s.tipo === 'limite') ? sumar(L, 'rt', a, b) : 0);
     const manual = esManual(s) ? Math.max(0, parseFloat(s.aporteManual)) : null;
 
     if (s.tipo === 'gasto' || s.tipo === 'limite') {
@@ -353,6 +358,7 @@
         if (por) por.forEach((p) => L[sobreId].ev.push({ f: p[0], ap: p[1] }));
         else L[sobreId].ev.push({ f: m.fecha, ap: v });
       },
+      retiro(sobreId, m, v) { if (L[sobreId]) L[sobreId].ev.push({ f: m.fecha, rt: v }); },
       cubre(sobreId, m, v) { if (st[sobreId]) st[sobreId].cubiertoSemana = (st[sobreId].cubiertoSemana || 0) + v; },
       dif(sobreId, m, v) { if (L[sobreId]) L[sobreId].ev.push({ f: m.fecha, dif: v, meses: m.meses || 1 }); },
       saldo(sobreId, f, v) {
@@ -409,6 +415,8 @@
         gastadoSemana: U.r2(espSemana[e.id].gastado), ingresadoSemana: U.r2(espSemana[e.id].ingresado),
         presupuesto: U.r2(presupuesto), falta: U.r2(falta)
       };
+      // lo que cada sobre se pasó y todavía no se cubre (sale de lo libre en negativo)
+      e.sobres.forEach((s) => { if (sobOut[s.id]) sobOut[s.id].porCubrir = U.r2(Math.min(E.exc[s.id] || 0, Math.max(0, -espOut[e.id].libre))); });
     });
     const cuentas = {}; S.cuentas.forEach((c) => { cuentas[c.id] = U.r2(E.cuentas[c.id]); });
     const partes = {}; Object.keys(E.partes).forEach((k) => { partes[k] = { b: U.r2(E.partes[k].b), m: U.r2(E.partes[k].m) }; });

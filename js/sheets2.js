@@ -236,8 +236,53 @@
         (ct ? '<button class="btn sec" style="margin:0" data-a="hoja" data-h="cuenta" data-id="' + ct.id + '" data-apilar="1">💳 Ver tarjeta</button>'
           : '<button class="btn sec" style="margin:0" data-a="hoja" data-h="registro" data-modo="gasto" data-esp="' + h.esp + '" data-sobre="' + s.id + '" data-apilar="1">− Gasto</button>') +
         '<button class="btn sec" style="margin:0" data-a="hoja" data-h="registro" data-modo="mover" data-esp="' + h.esp + '" data-sobre2="' + s.id + '" data-apilar="1">' + I.swap + ' Mover</button></div>';
+      if (st.porCubrir > 0.004) y += '<button class="btn" style="margin-top:12px" data-a="hoja" data-h="cubrir" data-esp="' + h.esp + '" data-id="' + s.id + '" data-apilar="1">🩹 Cubrir los ' + U.money(st.porCubrir) + ' que te pasaste</button>';
       y += '<div class="seccion" style="margin-top:20px"><div class="seccion-titulo"><h2>Últimos movimientos</h2></div>' + listaMovs(movsDe((m) => m.sobre === s.id || m.sobre2 === s.id, 10)) + '</div>';
       y += '<button class="btn sec" data-a="hoja" data-h="sobre-editar" data-esp="' + h.esp + '" data-id="' + s.id + '" data-apilar="1">' + I.edit + ' Editar sobre</button>';
+      return y;
+    }
+  };
+
+  /* ---------- Cubrir lo que te pasaste con otro sobre ---------- */
+  const fuentesCubrir = (c, s) => {
+    const out = [];
+    App.state.espacios.forEach((x) => x.sobres.forEach((o) => {
+      const so = c.sob[o.id];
+      if (o.id !== s.id && o.tipo !== 'tarjeta' && so && so.saldo > 0.004) out.push({ e: x, o, saldo: so.saldo });
+    }));
+    // primero los de tu mismo espacio y los de gasto libre (ocio, comida); al final ahorros, deudas y pagos con fecha
+    const peso = (x) => (x.e.id === App.espacioDe(s.id) ? 0 : 10) + ((x.o.tipo === 'gasto' || x.o.tipo === 'limite') && !x.o.fechaPago ? 0 : 1);
+    return out.sort((a, b) => peso(a) - peso(b) || b.saldo - a.saldo);
+  };
+  App.fuentesCubrir = fuentesCubrir;
+  App.espacioDe = (sid) => { const e = App.state.espacios.find((x) => x.sobres.some((o) => o.id === sid)); return e ? e.id : ''; };
+  H.cubrir = {
+    titulo: 'Cubrir lo que te pasaste',
+    render: (h) => {
+      const c = App.calc(); const e = App.espacio(h.esp); const s = e && e.sobres.find((x) => x.id === h.id);
+      if (!s) return '';
+      const pend = c.sob[s.id].porCubrir || 0;
+      if (!(pend > 0.004)) return '<p class="nota" style="text-align:center;padding:18px 0">✅ ' + U.esc(s.nombre) + ' ya está cubierto.</p>';
+      const fuentes = fuentesCubrir(c, s);
+      const varios = App.state.espacios.length > 1;
+      const f = h.de && fuentes.find((x) => x.o.id === h.de);
+      if (!f) {
+        let y = '<p class="nota" style="margin-top:0">Te pasaste <b>' + U.money(pend) + '</b> en ' + U.esc(s.icono + ' ' + s.nombre) + '. Elige de qué sobre sale el dinero para cubrirlo.</p><div class="etq">Cubrir con:</div>';
+        if (!fuentes.length) return y + '<p class="nota">No tienes otros sobres con dinero. Se cubre solo con tu siguiente ingreso.</p>';
+        y += '<div class="lista">' + fuentes.map((x) => {
+          const usa = Math.min(pend, x.saldo);
+          return '<button class="fila" data-a="cubrir-de" data-v="' + x.o.id + '"><div class="ico">' + U.esc(x.o.icono) + '</div><div class="txt"><b>' + U.esc(x.o.nombre) + (varios ? ' <small style="display:inline">· ' + U.esc(x.e.nombre) + '</small>' : '') + '</b><small>Tiene ' + U.money(x.saldo) + ' · ' + (usa < pend - 0.004 ? 'solo alcanza para ' + U.money(usa) : 'le quedarían ' + U.money(x.saldo - usa)) + '</small></div>' + I.chev + '</button>';
+        }).join('') + '</div>';
+        return y;
+      }
+      const monto = U.r2(Math.min(pend, f.saldo)); const queda = U.r2(f.saldo - monto);
+      let y = '<p style="margin-top:0">Vas a usar <b>' + U.money(monto) + '</b> de ' + U.esc(f.o.icono + ' ' + f.o.nombre) + ' para cubrir lo que te pasaste en ' + U.esc(s.icono + ' ' + s.nombre) + '.</p>';
+      y += '<div class="cuadro-sobre">' +
+        '<div><span>Te pasaste</span><b class="num">' + U.money(pend) + '</b><small>en ' + U.esc(s.nombre) + '</small></div>' +
+        '<div><span>Sale de ' + U.esc(f.o.nombre) + '</span><b class="num">' + U.money(monto) + '</b><small>tenía ' + U.money(f.saldo) + '</small></div>' +
+        '<div><span>A ' + U.esc(f.o.nombre) + ' le queda</span><b class="num">' + U.money(queda) + '</b><small>después de cubrir</small></div>' +
+        '<div><span>Queda por cubrir</span><b class="num ' + (pend - monto > 0.004 ? 'neg' : '') + '">' + U.money(pend - monto) + '</b><small>' + (pend - monto > 0.004 ? 'elige otro sobre después' : 'listo ✓') + '</small></div></div>';
+      y += '<button class="btn" style="margin-top:16px" data-a="cubrir-ok">Confirmar</button><button class="btn sec" data-a="cubrir-de" data-v="">Elegir otro sobre</button>';
       return y;
     }
   };

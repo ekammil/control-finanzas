@@ -268,7 +268,9 @@
     if (!fin || fin <= fecha) fin = App.finHorizonte(fecha);
     const lista = esp.sobres.map((s, i) => ({ s, i, st: c.sob[s.id] })).filter((x) => x.st).map((x) => { const n = App.necesidad(x.s, c.L[x.s.id], fecha, fin); return Object.assign(x, { falta: n.total, por: n.por }); }).filter((x) => x.falta > 0);
     const urge = (x) => (x.s.tipo === 'deuda' || x.s.tipo === 'tarjeta' || x.s.fechaPago ? 0 : 1);
-    lista.sort((a, b) => urge(a) - urge(b) || (urge(a) === 0 ? String(a.st.venc || '9').localeCompare(String(b.st.venc || '9')) : 0) || a.i - b.i);
+    // primero lo que vence antes (aunque en tu lista esté más abajo); a la misma fecha, los pagos y luego el orden de tu lista
+    const vence = (x) => (x.s.tipo === 'ahorro' && !(x.s.meta > 0) ? '9999' : String(x.st.venc || x.st.cFin || '9999'));
+    lista.sort((a, b) => vence(a).localeCompare(vence(b)) || urge(a) - urge(b) || a.i - b.i);
     lista.forEach(({ s, falta, por }) => {
       const x = U.r2(Math.min(falta, Math.max(0, libre)));
       if (x > 0) { agregar(s, x, 'Reparto', por); libre = U.r2(libre - x); }
