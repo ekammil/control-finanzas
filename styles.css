@@ -120,7 +120,16 @@ input, select, textarea { font: inherit; color: inherit; }
 .barra-prog i.cuidado { background: var(--amber); } .barra-prog i.pasado { background: var(--red); } .barra-prog i.azul { background: var(--blue); }
 
 /* ---------- avisos ---------- */
-.aviso { display: flex; gap: 12px; align-items: flex-start; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.aviso { position: relative; display: flex; gap: 12px; align-items: flex-start; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.prio { margin: 4px 0 6px; border-radius: 16px; background: rgba(255, 159, 10, .08); border: 1px solid rgba(255, 159, 10, .35); padding: 0 12px; }
+.prio-tab { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 0; text-align: left; color: var(--text); }
+.prio-tab b { font-size: 15px; font-weight: 650; }
+.prio-tab .prio-n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: #ff453a; color: #fff; font-size: 12px; font-weight: 700; font-style: normal; line-height: 20px; text-align: center; }
+.prio-tab span { margin-left: auto; font-size: 13px; color: #ff9f0a; }
+.prio:not(.oculto) .prio-tab { border-bottom: 1px solid var(--line); }
+.prio .aviso:last-child { border-bottom: 0; }
+.aviso-x { position: absolute; top: 10px; right: 0; width: 28px; height: 28px; border-radius: 14px; background: var(--fill); color: var(--text-2); font-size: 13px; line-height: 28px; text-align: center; }
+.aviso .aviso-x ~ .txt { padding-right: 30px; }
 .aviso .ico { width: 36px; height: 36px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--fill); font-size: 17px; }
 .aviso .ico svg { width: 18px; height: 18px; }
 .aviso .txt { flex: 1; }
