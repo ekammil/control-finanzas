@@ -189,7 +189,8 @@
     } else if (s.tipo === 'ahorro') {
       let cuota = Number(s.cuota) || 0;
       if (s.meta > 0 && s.hasta && s.hasta >= P.ini) {
-        const resta = s.meta - Math.max(0, saldoAntesDe(L, P.ini));
+        // lo que saques del sobre en este periodo se vuelve a pedir (no cuenta como juntado)
+        const resta = s.meta - Math.max(0, saldoAntesDe(L, P.ini) - sumar(L, 'rt', P.ini, P.fin));
         cuota = c2(Math.max(0, resta) / Math.max(1, U.contarPeriodos(fA, P.ini, s.hasta)));
         o.venc = s.hasta;
       }
@@ -207,7 +208,7 @@
         else {
           const pI = s.desde && s.desde > P.ini ? s.desde : P.ini;
           const n = pI > s.hasta ? 0 : U.contarPeriodos(fA, pI, s.hasta);
-          const resta = Math.max(0, s.meta - sumar(L, 'pg', '0000-00-00', P.ini) - Math.max(0, saldoAntesDe(L, P.ini)));
+          const resta = Math.max(0, s.meta - sumar(L, 'pg', '0000-00-00', P.ini) - Math.max(0, saldoAntesDe(L, P.ini) - sumar(L, 'rt', P.ini, P.fin)));
           o.cuota = n > 0 ? c2(resta / n) : 0;
           o.n = n;
         }
