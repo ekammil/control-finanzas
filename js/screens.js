@@ -143,7 +143,7 @@
         quitable('libre-' + e.id, '<div class="aviso"><div class="ico">✨</div><div class="txt"><b>Tienes ' + U.money(x.libre) + ' libres en ' + U.esc(e.nombre) + '</b><p>A tus sobres les faltan ' + U.money(x.falta) + ' por ahora.</p>' +
           '<div class="acciones"><button class="btn-chico blanco" data-a="repartir" data-id="' + e.id + '">Repartir</button></div></div></div>');
       } else if (x.libre < -0.5) {
-        quitable('neg-' + e.id, '<div class="aviso"><div class="ico">⚠️</div><div class="txt"><b>' + U.esc(e.nombre) + ': libre en ' + U.money(x.libre) + '</b><p>Gastaste más de lo que tenía el sobre. Cúbrelo moviendo dinero de otro sobre al que te pasaste, o se cubre solo con tu siguiente ingreso.</p>' +
+        quitable('neg-' + e.id, '<div class="aviso"><div class="ico">⚠️</div><div class="txt"><b>' + U.esc(e.nombre) + ': libre en ' + U.money(x.libre) + '</b><p>Gastaste más de lo que había en este espacio. Pasa dinero desde otro sobre o espacio con Mover, o se cubre solo con tu siguiente ingreso.</p>' +
           '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" data-h="registro" data-modo="mover" data-esp="' + e.id + '">Mover dinero</button></div></div></div>');
       }
     });

@@ -58,7 +58,7 @@
     if (s.tipo === 'porIngreso') return App.txtPorIngreso(s);
     if (s.tipo === 'ahorro') return 'Ahorro · ' + (s.meta > 0 && s.hasta ? 'meta ' + U.money0(s.meta) + ' para el ' + U.fechaCorta(s.hasta) : U.money0(s.cuota) + ' ' + U.FREC_CADA[fA]);
     if (s.tipo === 'tarjeta') return 'Pago de tarjeta · aporte ' + U.FREC_CADA[fA];
-    return (s.tipo === 'limite' ? 'Tope ' : '') + U.money0(s.cuota) + ' ' + U.FREC_CADA[U.frec(s.frecPago)] + (s.fechaPago ? ' · paga el ' + U.fechaCorta(U.siguienteVenc(s.frecPago, s.fechaPago, U.today())) : '');
+    return (s.tipo === 'limite' ? 'Tope ' : '') + U.money0(s.cuota) + ' ' + U.FREC_CADA[U.frec(s.frecPago)] + (s.fechaPago ? ' · paga el ' + U.fechaCorta(U.siguienteVenc(s.frecPago, s.fechaPago, U.today() > s.fechaPago ? U.today() : s.fechaPago)) : '');
   };
   App.resumenSobre = resumenSobre;
 

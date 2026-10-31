@@ -544,7 +544,9 @@
     S.espacios.forEach((e) => e.sobres.forEach((s) => {
       const st = c.sob[s.id];
       if ((s.tipo === 'gasto' || s.tipo === 'limite') && s.fechaPago && !conRec[s.id] && s.cuota > 0) {
-        let f = U.siguienteVenc(s.frecPago, s.fechaPago, hoy);
+        // el primer pago es la fecha que pusiste: antes de ella no hay pagos
+        const desde = hoy > s.fechaPago ? hoy : s.fechaPago;
+        let f = U.siguienteVenc(s.frecPago, s.fechaPago, desde);
         if (s.pagado && s.pagado === f) f = U.siguienteVenc(s.frecPago, s.fechaPago, U.addDays(f, 1));
         out.push({ tipo: 'sobre', r: { id: s.id, nombre: s.nombre, monto: s.cuota, avisar: s.avisar, sobre: s.id, espacio: e.id, frec: s.frecPago }, fecha: f, dias: U.daysBetween(hoy, f) });
       }
