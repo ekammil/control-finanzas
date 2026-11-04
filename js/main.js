@@ -588,7 +588,7 @@
     return U.r2(total);
   };
 
-  /* ---------------- notificaciones del celular ----------------
+  /* Cubrir solo: si un pago vence en 2 días o menos y su sobre no alcanza, toma de los sobres más lejanos de ese espacio */ App.autoCubrir = () => { const S = App.state; if (!S.ajustes.autoCubrir || S.ajustes.onboarding) return []; const hoy = U.today(); const hechos = []; const pagos = App.proximosPagos().filter((p) => p.tipo === 'sobre' && p.dias >= 0 && p.dias <= 2).sort((a, b) => a.fecha.localeCompare(b.fecha)); pagos.forEach((p) => { const sid = p.r.sobre; const eid = p.r.espacio; let c = App.calc(); const st = c.sob[sid]; let falta = U.r2(p.r.monto - (st ? st.saldo : 0)); if (!(falta > 0.004)) return; const e = App.espacio(eid); if (!e) return; const vence = (o) => { const so = c.sob[o.id]; return o.tipo === 'ahorro' && !(o.meta > 0) ? '9999' : String((so && (so.venc || so.cFin)) || '9999'); }; const fuentes = e.sobres.filter((o) => o.id !== sid && o.tipo !== 'tarjeta' && o.tipo !== 'deuda' && o.tipo !== 'porIngreso' && c.sob[o.id] && c.sob[o.id].saldo > 0.004 && vence(o) > p.fecha) .sort((a, b) => vence(b).localeCompare(vence(a)) || c.sob[b.id].saldo - c.sob[a.id].saldo); fuentes.forEach((o) => { if (!(falta > 0.004)) return; const x = U.r2(Math.min(falta, App.calc().sob[o.id].saldo)); if (!(x > 0.004)) return; S.movs.push(App.nuevoMov({ fecha: hoy, tipo: 'mover', monto: x, espacio: eid, sobre: o.id, espacio2: eid, sobre2: sid, nota: 'Auto-cubrir: ' + p.r.nombre + (p.dias ? ' en ' + p.dias + ' d' : ' hoy'), origen: 'auto' })); hechos.push({ de: o.nombre, a: p.r.nombre, monto: x }); falta = U.r2(falta - x); }); }); if (hechos.length) App.save(); return hechos; }; /* ---------------- notificaciones del celular ----------------
      Sin servidor: salen al abrir la app o mientras está abierta. Cada aviso se manda una sola vez. */
   App.horaTxt = (h) => { h = Number(h) || 21; return (h > 12 ? h - 12 : h) + ':00 ' + (h >= 12 ? 'pm' : 'am'); };
   App.notifPermitidas = () => 'Notification' in window && Notification.permission === 'granted';
@@ -640,7 +640,7 @@
   };
   setInterval(() => { if (!document.hidden) App.revisarNotifs(); }, 15 * 60000);
   const despuesDeAbrir = () => {
-    const rep = App.autoRepartir();
+    const rep = App.autoRepartir(); const cub = App.autoCubrir(); if (cub.length) setTimeout(() => App.toast('🔁 Cubrí ' + cub.map((h) => U.money(h.monto) + ' de ' + h.de + ' → ' + h.a).join(', '), 'ok'), 1800);
     if (rep > 0) setTimeout(() => App.toast('✨ Aparté ' + U.money(rep) + ' en tus sobres', 'ok'), 900);
     setTimeout(App.revisarNotifs, 2500);
     App.programarCuadre();
