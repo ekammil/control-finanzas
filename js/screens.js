@@ -288,7 +288,7 @@
     h += '<div class="seccion"><div class="seccion-titulo"><h2>Hábitos</h2></div>' +
       sw('cuadreNoche', 'Cuadre de la noche', 'Desde las ' + App.horaTxt(a.horaCuadre) + ' te sugiere revisar tu dinero real') +
       sw('repartirSolo', 'Repartir solo', 'Lo que te entre y lo que quede libre se aparta solo en tus sobres') +
-      fila('hoja', I.bell, 'Notificaciones', App.notifPermitidas() ? 'Activadas' : 'Avisos en el celular', 'data-h="avisos"') +
+      sw('autoCubrir', 'Cubrir solo', 'Si un pago vence en 2 días y no alcanza, toma dinero del sobre más lejano (nunca tarjeta ni deuda)') + fila('hoja', I.bell, 'Notificaciones', App.notifPermitidas() ? 'Activadas' : 'Avisos en el celular', 'data-h="avisos"') +
       fila('hoja', I.bell, 'Alertas', a.alertas === false ? 'Desactivadas' : 'Sobres al ' + a.alertaSobre + '% · tarjetas al ' + a.alertaTarjeta + '%', 'data-h="alertas"') +
       sw('sonidos', 'Sonidos', 'Al gastar, al recibir dinero y en alertas') +
       sw('vibracion', 'Vibración', 'Al guardar y en alertas') + '</div>';
