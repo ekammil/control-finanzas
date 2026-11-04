@@ -37,7 +37,7 @@
       vibracion: true,
       cuadreNoche: false,
       horaCuadre: 21,
-      repartirSolo: true,
+      repartirSolo: true, autoCubrir: false,
       notifPagos: true,
       notifCuadre: true,
       notifPasado: true,
