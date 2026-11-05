@@ -267,14 +267,7 @@
     let fin = ult ? App.finHorizonte(ult) : '';
     if (!fin || fin <= fecha) fin = App.finHorizonte(fecha);
     const lista = esp.sobres.map((s, i) => ({ s, i, st: c.sob[s.id] })).filter((x) => x.st).map((x) => { const n = App.necesidad(x.s, c.L[x.s.id], fecha, fin); return Object.assign(x, { falta: n.total, por: n.por }); }).filter((x) => x.falta > 0);
-    const urge = (x) => (x.s.tipo === 'deuda' || x.s.tipo === 'tarjeta' || x.s.fechaPago ? 0 : 1);
-    // primero lo que vence antes (aunque en tu lista esté más abajo); a la misma fecha, los pagos y luego el orden de tu lista
-    const vence = (x) => (x.s.tipo === 'ahorro' && !(x.s.meta > 0) ? '9999' : String(x.st.venc || x.st.cFin || '9999'));
-    lista.sort((a, b) => vence(a).localeCompare(vence(b)) || urge(a) - urge(b) || a.i - b.i);
-    lista.forEach(({ s, falta, por }) => {
-      const x = U.r2(Math.min(falta, Math.max(0, libre)));
-      if (x > 0) { agregar(s, x, 'Reparto', por); libre = U.r2(libre - x); }
-      if (x < falta) pendientes.push({ sobre: s.nombre, monto: U.r2(falta - x) });
+    const urge = (x) => (x.s.tipo === 'deuda' || x.s.tipo === 'tarjeta' || x.s.fechaPago ? 0 : 1); const vence = (x) => (x.s.tipo === 'ahorro' && !(x.s.meta > 0) ? '9999' : String(x.st.venc || x.st.cFin || '9999')); const trozos = []; lista.forEach((x) => (x.por && x.por.length ? x.por : [[fecha, x.falta]]).forEach(([f, m]) => trozos.push({ x, f, m }))); trozos.sort((a, b) => a.f.localeCompare(b.f) || vence(a.x).localeCompare(vence(b.x)) || urge(a.x) - urge(b.x) || a.x.i - b.x.i); const dado = {}; const orden = []; trozos.forEach(({ x, f, m }) => { const v = U.r2(Math.min(m, Math.max(0, libre))); if (v > 0) { if (!dado[x.s.id]) { dado[x.s.id] = []; orden.push(x); } dado[x.s.id].push([f, v]); libre = U.r2(libre - v); } }); orden.forEach((x) => { const tot = U.r2(dado[x.s.id].reduce((t, p) => t + p[1], 0)); agregar(x.s, tot, 'Reparto', dado[x.s.id]); }); lista.forEach((x) => { const tot = U.r2((dado[x.s.id] || []).reduce((t, p) => t + p[1], 0)); if (tot < x.falta - 0.004) pendientes.push({ sobre: x.s.nombre, monto: U.r2(x.falta - tot) }); }); ;(() => {
     });
     return { partes, pendientes };
   };
