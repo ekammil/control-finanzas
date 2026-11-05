@@ -43,7 +43,7 @@
         }
         // si con este dinero lo libre ya no está en negativo, lo que te pasaste ya quedó cubierto
         if (delta > 0 && esp[m.espacio] !== undefined && libreDe(m.espacio) >= -0.004) Object.keys(exc).forEach((k) => { if (sobEsp[k] === m.espacio) exc[k] = 0; });
-        if (t === 'ingreso' && w) w.ingreso(m);
+        /* cuadre a la baja: los sobres se encogen solos */ if (t === 'ajuste' && delta < 0 && esp[m.espacio] !== undefined) { let falta = -libreDe(m.espacio); if (falta > 0.004) { const rango = (o) => (o.tipo === 'deuda' ? 3 : o.fechaPago ? 2 : o.tipo === 'ahorro' && o.meta > 0 ? 1 : 0); const e = S.espacios.find((x) => x.id === m.espacio); (e ? e.sobres : []).filter((o) => o.tipo !== 'tarjeta' && sob[o.id] > 0.004) .sort((p, q) => rango(p) - rango(q) || String(q.fechaPago || '').localeCompare(String(p.fechaPago || '')) || sob[q.id] - sob[p.id]) .forEach((o) => { if (falta <= 0.004) return; const x = Math.min(falta, sob[o.id]); sob[o.id] -= x; falta -= x; if (w) { w.retiro(o.id, m, x); w.saldo(o.id, m.fecha, sob[o.id]); } }); } } if (t === 'ingreso' && w) w.ingreso(m);
         return;
       }
       if (t === 'traspaso') {
