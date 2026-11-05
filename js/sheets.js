@@ -404,7 +404,7 @@
         else x += campo(ct.id, U.esc(ct.icono) + ' ' + U.esc(ct.nombre));
       });
       x += '<button class="btn" data-a="cuadre-guardar">' + I.check + 'Guardar cuadre</button>';
-      x += '<p class="nota">Los ajustes salen o entran a lo "Libre" de ' + U.esc((App.espacioPrincipal() || {}).nombre || 'tu espacio principal') + '. No tocan tus sobres.</p>';
+      x += '<p class="nota">Los ajustes salen o entran a lo "Libre" de ' + U.esc((App.espacioPrincipal() || {}).nombre || 'tu espacio principal') + '. Si te quedas con menos dinero que el que tenían tus sobres, los sobres bajan solos (primero ahorro y gastos libres; tarjeta no se toca).</p>';
       return x;
     }
   };
