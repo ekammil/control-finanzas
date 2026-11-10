@@ -50,6 +50,21 @@
     return App.txtPorIngreso(s) + (s.meta > 0 ? ' · meta ' + U.money0(s.meta) : '');
   };
   App.descSobre = descSobre;
+  /* Una sola línea, corta, para la lista de sobres (el detalle completo está al tocar el sobre) */
+  const subCorto = (s, st) => {
+    if (s.tipo === 'gasto' || s.tipo === 'limite') {
+      if (s.fechaPago) return 'Paga el ' + U.fechaCorta(st.venc);
+      if (st.M > 0) { const pc = App.presupuestoCiclo(s, st); return pc.M - st.gastadoCiclo < 0 ? 'Te pasaste ' + U.money0(st.gastadoCiclo - pc.M) : 'Gastado ' + U.money0(st.gastadoCiclo) + ' de ' + U.money0(pc.M); }
+      return 'Sin tope';
+    }
+    if (s.tipo === 'ahorro') {
+      if (s.meta > 0) return Math.max(0, st.saldo) >= s.meta ? 'Meta lograda 🎉' : 'Meta ' + U.money0(s.meta);
+      return 'Ahorro libre';
+    }
+    if (s.tipo === 'deuda') return 'Llevas ' + U.money0(st.pagado + Math.max(0, st.saldo)) + ' de ' + U.money0(s.meta);
+    if (s.tipo === 'tarjeta') return st.saldo < -0.004 ? (st.venc ? 'Pago ' + U.fechaCorta(st.venc) : 'Falta juntar') : 'Al corriente ✓';
+    return App.txtPorIngreso(s);
+  };
 
   /* Resumen corto de cómo está configurado un sobre */
   const resumenSobre = (s) => {
@@ -117,9 +132,8 @@
       y += '<div class="dos" style="margin-top:16px">' +
         '<button class="btn sec" style="margin:0" data-a="repartir" data-id="' + e.id + '" ' + (x.libre > 0 && x.falta > 0 ? '' : 'disabled') + '>✨ Repartir</button>' +
         '<button class="btn sec" style="margin:0" data-a="hoja" data-h="registro" data-modo="mover" data-esp="' + e.id + '" data-apilar="1">' + I.swap + ' Mover</button></div>';
-      y += cuadroMinimo(e, c);
       y += '<div class="seccion" style="margin-top:20px"><div class="seccion-titulo"><h2>Sobres</h2><button data-a="hoja" data-h="sobre-editar" data-esp="' + e.id + '" data-apilar="1">Agregar</button></div>' +
-        '<p class="nota" style="margin:-4px 0 6px">El número de la derecha es lo que hay ahora en cada sobre. La barra muestra cuánto llevas gastado de lo planeado, o cuánto llevas juntado de tu pago o meta. Toca un sobre para ver todo el detalle.</p>';
+        '<p class="nota" style="margin:-4px 0 6px">A la derecha, lo que hay ahora en cada sobre. Toca uno para ver el detalle.</p>';
       if (!e.sobres.length) y += '<div class="nota">Este espacio no tiene sobres. Agrega uno para organizar tu dinero.</div>';
       e.sobres.forEach((s) => {
         const st = c.sob[s.id];
@@ -127,11 +141,13 @@
         const clase = (s.tipo === 'gasto' || s.tipo === 'limite') ? st.estado : (s.meta > 0 ? 'azul' : st.estado);
         const conBarra = ((s.tipo === 'gasto' || s.tipo === 'limite') && st.cuota > 0) || s.meta > 0 || s.tipo === 'deuda';
         y += '<button class="fila" data-a="hoja" data-h="sobre" data-esp="' + e.id + '" data-id="' + s.id + '" data-apilar="1">' +
-          '<div class="ico">' + U.esc(s.icono) + '</div><div class="txt"><b>' + U.esc(s.nombre) + (s.disponible ? ' <small style="display:inline;color:var(--green)">· disponible</small>' : '') + '</b><small style="white-space:normal">' + descSobre(s, st) + '</small>' +
+          '<div class="ico">' + U.esc(s.icono) + '</div><div class="txt"><b>' + U.esc(s.nombre) + (s.disponible ? ' <small style="display:inline;color:var(--green)">· disponible</small>' : '') + '</b><small>' + subCorto(s, st) + '</small>' +
           (conBarra ? App.barraProg(p, clase) : '') + '</div>' +
-          '<div class="der"><b class="num ' + (st.saldo < -0.004 ? 'neg' : '') + '">' + U.money(st.saldo) + '</b><small>' + (s.tipo === 'tarjeta' && st.saldo < -0.004 ? 'por juntar' : 'en el sobre') + '</small></div></button>';
+          '<div class="der"><b class="num ' + (st.saldo < -0.004 ? 'neg' : '') + '">' + U.money(st.saldo) + '</b>' + (s.tipo === 'tarjeta' && st.saldo < -0.004 ? '<small>por juntar</small>' : '') + '</div></button>';
       });
-      y += '</div><button class="btn sec" data-a="hoja" data-h="espacio-editar" data-id="' + e.id + '" data-apilar="1">' + I.edit + ' Editar espacio</button>';
+      y += '</div>';
+      y += cuadroMinimo(e, c);
+      y += '<button class="btn sec" data-a="hoja" data-h="espacio-editar" data-id="' + e.id + '" data-apilar="1">' + I.edit + ' Editar espacio</button>';
       return y;
     }
   };
@@ -159,22 +175,30 @@
     const entra = ings.filter((m) => m.fecha >= ini).reduce((t, m) => t + Number(m.monto), 0);
     return { dia, pct, por: por.sort((a, b) => b[1] - a[1]), entraDia: ings.length && dias >= 7 ? entra / dias : null, dias };
   };
+  const COLORES_DONA = ['#7aa2ff', '#3ddc97', '#ffc857', '#c79bff', '#ff9f7a', '#6fd3e0', '#f08ab5', '#a8c96b'];
   const cuadroMinimo = (e, c) => {
     const m = App.minimoEspacio(e, c);
     if (!(m.dia > 0)) return '';
     const mes = m.dia * 365 / 12;
-    let y = '<div class="seccion" style="margin-top:20px"><div class="seccion-titulo"><h2>💡 Lo mínimo que necesitas</h2></div>' +
-      '<p class="nota" style="margin:-4px 0 6px">Lo que te tiene que entrar en ' + U.esc(e.nombre) + ' para cubrir todos sus sobres' + (m.pct > 0 ? ' (ya contando el ' + U.r2(m.pct) + '% que se aparta de cada ingreso)' : '') + '.</p>' +
-      '<div class="cuadro-sobre" style="margin-top:0">' +
-      [['Al día', m.dia], ['A la semana', m.dia * 7], ['A la quincena', mes / 2], ['Al mes', mes]].map(([t, v]) => '<div><span>' + t + '</span><b class="num">' + U.money(v) + '</b></div>').join('') + '</div>';
+    // dona: qué parte del mínimo pide cada sobre (los más chicos se juntan en "otros")
+    const tot = m.por.reduce((t, x) => t + x[1], 0) || 1;
+    const top = m.por.slice(0, 6); const resto = m.por.slice(6).reduce((t, x) => t + x[1], 0);
+    const partes = top.map(([s, d], i) => ({ n: s.icono + ' ' + s.nombre, d, col: COLORES_DONA[i] })); if (resto > 0) partes.push({ n: 'Otros', d: resto, col: 'rgba(255,255,255,.28)' });
+    let acc = 0; const grad = partes.map((x) => { const ini = acc / tot * 100; acc += x.d; return x.col + ' ' + ini.toFixed(2) + '% ' + (acc / tot * 100).toFixed(2) + '%'; }).join(',');
+    let estado = '';
     if (m.entraDia !== null) {
       const dif = (m.entraDia - m.dia) * 365 / 12;
-      y += '<p class="nota ' + (dif < 0 ? 'cuidado' : '') + '" style="margin-top:10px">' + (m.dias >= 30 ? 'En los últimos 30 días' : 'En los últimos ' + m.dias + ' días') + ' te entraron en promedio ' + U.money(m.entraDia) + ' al día (≈ ' + U.money0(m.entraDia * 365 / 12) + ' al mes). ' +
-        (dif >= 0 ? '✅ Te alcanza para todo y te sobran ≈ ' + U.money0(dif) + ' al mes.' : '⚠️ No te alcanza: te faltan ≈ ' + U.money0(-dif) + ' al mes (' + U.money0(-dif * 12 / 365) + ' al día).') + '</p>';
-    } else y += '<p class="nota" style="margin-top:10px">Cuando registres ingresos en este espacio por al menos una semana, aquí te digo si te alcanza.</p>';
-    y += '<details class="nota" style="margin-top:6px"><summary>Ver cuánto pide cada sobre</summary>' +
-      m.por.map(([s, d]) => '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0"><span>' + U.esc(s.icono) + ' ' + U.esc(s.nombre) + '</span><span class="num">' + U.money0(d * 365 / 12) + '/mes · ' + U.money(d) + '/día</span></div>').join('') +
-      (m.pct > 0 ? '<div style="padding:3px 0">+ ' + U.r2(m.pct) + '% de cada ingreso para sobres por ingreso</div>' : '') + '</details></div>';
+      estado = dif >= 0 ? '<span class="min-ok">✓ Te alcanza</span>' : '<span class="min-mal">Te faltan ≈ ' + U.money0(-dif) + ' al mes</span>';
+    }
+    let y = '<div class="minimo"><div class="minimo-cab"><span>💡 Lo mínimo que necesitas</span>' + estado + '</div>' +
+      '<div class="minimo-cuerpo"><div class="dona" style="background:conic-gradient(' + grad + ')"><i></i></div>' +
+      '<div class="minimo-cifra"><b class="num">' + U.money0(m.dia * 7) + '</b><small>a la semana</small><small>≈ ' + U.money0(mes) + ' al mes</small></div></div>' +
+      '<details class="minimo-det"><summary>Ver detalle</summary>' +
+      '<p class="nota" style="margin:8px 0">Lo que te tiene que entrar en ' + U.esc(e.nombre) + ' para cubrir todos sus sobres' + (m.pct > 0 ? ' (contando el ' + U.r2(m.pct) + '% que se aparta de cada ingreso)' : '') + '.</p>' +
+      '<div class="min-lista">' + partes.map((x) => '<div><i style="background:' + x.col + '"></i><span>' + U.esc(x.n) + '</span><b class="num">' + U.money0(x.d * 7) + '<small>/sem</small></b></div>').join('') + '</div>' +
+      '<div class="min-lista" style="margin-top:8px"><div><span>Al día</span><b class="num">' + U.money(m.dia) + '</b></div><div><span>A la quincena</span><b class="num">' + U.money(mes / 2) + '</b></div></div>' +
+      (m.entraDia !== null ? '<p class="nota" style="margin-top:8px">' + (m.dias >= 30 ? 'En los últimos 30 días' : 'En los últimos ' + m.dias + ' días') + ' te entraron en promedio ' + U.money(m.entraDia) + ' al día (≈ ' + U.money0(m.entraDia * 365 / 12) + ' al mes).</p>' : '<p class="nota" style="margin-top:8px">Cuando registres ingresos aquí por una semana, te digo si te alcanza.</p>') +
+      '</details></div>';
     return y;
   };
 
@@ -213,7 +237,12 @@
       f.push(['Apartas', ap, distinto ? 'por ahora (lo normal: ' + U.money(st.constante) + ')' : 'de tus ingresos']);
       f.push(['Falta apartar', U.money(st.falta), st.falta > 0 ? cuando : cuando + ' ya está ✓']);
     } else f.push(['Apartas', ap, '']);
-    return '<div class="cuadro-sobre">' + f.map(([t, v, d]) => '<div><span>' + t + '</span><b class="num">' + v + '</b>' + (d ? '<small>' + d + '</small>' : '') + '</div>').join('') + '</div>';
+    const celda = ([t, v, d]) => '<div><span>' + t + '</span><b class="num">' + v + '</b>' + (d ? '<small>' + d + '</small>' : '') + '</div>';
+    const claves = ['Por juntar', 'Planeado', 'Gastado', 'Te queda por gastar', 'Te pasaste', 'Pago', 'Te falta juntar', 'Meta', 'Te falta', 'Ya pagaste', 'Compras a pagar'];
+    const prin = f.filter((x) => claves.includes(x[0]) && x[0] !== 'Planeado').slice(0, 4);
+    const resto = f.filter((x) => !prin.includes(x));
+    return '<div class="cuadro-sobre">' + prin.map(celda).join('') + '</div>' +
+      (resto.length ? '<details class="minimo-det" style="margin-top:12px"><summary>Ver más detalle</summary><div class="cuadro-sobre">' + resto.map(celda).join('') + '</div></details>' : '');
   };
 
   /* ---------- Sobre (detalle) ---------- */
@@ -223,7 +252,7 @@
       const s = App.sobre(h.esp, h.id); if (!s) return '<div class="vacio-txt">Este sobre ya no existe.</div>';
       const st = App.calc().sob[s.id];
       let y = '<div class="hero" style="margin-top:4px"><div class="etiqueta">' + App.tipoSobre(s.tipo).nombre + '</div><div class="grande" style="font-size:38px">' + App.montoGrande(st.saldo) + '</div>' +
-        '<p class="nota" style="margin-top:4px">' + descSobre(s, st) + '</p></div>';
+        '<p class="nota" style="margin-top:4px">' + subCorto(s, st) + '</p></div>';
       if ((s.tipo === 'gasto' || s.tipo === 'limite') && st.M > 0) y += App.barraProg(st.progreso, s.fechaPago ? (st.estado === 'pasado' ? 'pasado' : 'azul') : st.estado);
       if (s.tipo === 'tarjeta' && st.compras > 0) y += App.barraProg(st.progreso, 'azul');
       if (s.meta > 0 || s.tipo === 'deuda') {
