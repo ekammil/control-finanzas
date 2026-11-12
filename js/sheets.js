@@ -127,7 +127,7 @@
           x += '<div class="etq">Sobre</div><div class="chips">';
           if (e) e.sobres.filter((s) => s.tipo !== 'porIngreso' && s.tipo !== 'tarjeta').forEach((s) => {
             const st = c.sob[s.id];
-            x += chip(h.sobre === s.id, 'reg-sobre', 'data-v="' + s.id + '"', U.esc(s.icono) + ' ' + U.esc(s.nombre) + ' <small class="num">' + U.money0(st ? st.saldo : 0) + '</small>');
+            x += chip(h.sobre === s.id, 'reg-sobre', 'data-v="' + s.id + '"', U.esc(s.icono) + ' ' + U.esc(s.nombre) + (s.candado ? ' 🔒' : '') + ' <small class="num">' + U.money0(st ? st.saldo : 0) + '</small>');
           });
           x += chip(!h.sobre, 'reg-sobre', 'data-v=""', '🧾 Sin sobre <small class="num">' + U.money0(c.esp[h.espacio] ? c.esp[h.espacio].libre : 0) + '</small>') + '</div>';
         }
@@ -156,7 +156,7 @@
           if (c1 && c1.partes) x += segPartes('reg-sub', h.sub);
           x += '<div class="etq">A</div><div class="chips">' + S.cuentas.filter((ct) => ct.id !== h.cuenta || ct.partes).map((ct) => chip(h.cuenta2 === ct.id, 'reg-cuenta2', 'data-v="' + ct.id + '"', etqCuenta(ct))).join('') + '</div>';
           if (c2c && c2c.partes) x += segPartes('reg-sub2', h.sub2);
-          x += '<p class="nota">' + (App.esCredito(c2c) ? 'Pagar la tarjeta no cambia tu Disponible: ese dinero ya estaba contado.' : h.cuenta === h.cuenta2 ? 'Cambiar billetes por monedas (o al revés). Tu total no cambia.' : 'Por ejemplo: depositar efectivo al banco. No cuenta como gasto ni ingreso.') + '</p>';
+          x += '<p class="nota">' + (App.esCredito(c2c) ? 'Pagar la tarjeta no cambia tu dinero libre: ese dinero ya estaba apartado.' : h.cuenta === h.cuenta2 ? 'Cambiar billetes por monedas (o al revés). Tu total no cambia.' : 'Por ejemplo: depositar efectivo al banco. No cuenta como gasto ni ingreso.') + '</p>';
         } else {
           const lado = (espKey, sobKey, accionEsp, accionSob, etiqueta) => {
             let y = '<div class="etq">' + etiqueta + '</div>';
@@ -214,10 +214,12 @@
     return out.join('');
   };
 
-  App.tecladoHTML = () => '<div class="teclado">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del'].map((k) => '<button data-a="tecla" data-k="' + k + '" aria-label="' + (k === 'del' ? 'Borrar' : k) + '">' + (k === 'del' ? I.del : k) + '</button>').join('') + '</div>';
-  App.montoNum = (h) => U.r2(parseFloat(h.monto || '0') || 0);
+  App.tecladoHTML = () => '<div class="ops">' + [['+', '+'], ['-', '−'], ['*', '×'], ['/', '÷']].map((k) => '<button data-a="tecla" data-k="' + k[0] + '" aria-label="' + k[1] + '">' + k[1] + '</button>').join('') + '</div><div class="teclado">' + ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del'].map((k) => '<button data-a="tecla" data-k="' + k + '" aria-label="' + (k === 'del' ? 'Borrar' : k) + '">' + (k === 'del' ? I.del : k) + '</button>').join('') + '</div>';
+  App.montoNum = (h) => U.calcular(h.monto);
   App.montoTxt = (h) => {
     if (!h.monto) return '<span style="opacity:.35">$0</span><span class="cursor"></span>';
+    // cuenta escrita (250+85+40): se ve la operación y abajo el total que se va a guardar
+    if (/[+\-*\/]/.test(h.monto)) return '<span class="expr">' + U.esc(h.monto.replace(/\*/g, '×').replace(/\//g, '÷').replace(/-/g, '−').replace(/([+−×÷])/g, ' $1 ')) + '</span><span class="cursor"></span><small class="expr-tot">= $' + App.montoNum(h).toFixed(2) + '</small>';
     const [ent, dec] = h.monto.split('.');
     const e = new Intl.NumberFormat('es-MX').format(Number(ent || 0));
     return '$' + e + (dec !== undefined ? '.' + dec : '') + '<span class="cursor"></span>';
@@ -226,12 +228,16 @@
   App.tecla = (k) => {
     const h = App.h; if (!h) return;
     let m = h.monto || '';
+    const OPS = '+-*/';
+    const u = m.split(/[+\-*\/]/).pop(); // el número que se está escribiendo
     if (k === 'del') m = m.slice(0, -1);
-    else if (k === '.') { if (!m.includes('.')) m = (m || '0') + '.'; }
+    else if (m.length >= 40) return;
+    else if (OPS.includes(k)) { if (!m) return; m = OPS.includes(m.slice(-1)) ? m.slice(0, -1) + k : m + k; }
+    else if (k === '.') { if (u.includes('.')) return; m += u ? '.' : '0.'; }
     else {
-      if (m.includes('.') && m.split('.')[1].length >= 2) return;
-      if (m.replace('.', '').length >= 9) return;
-      m = m === '0' ? k : m + k;
+      if (u.includes('.') && u.split('.')[1].length >= 2) return;
+      if (u.replace('.', '').length >= 9) return;
+      m = u === '0' ? m.slice(0, -1) + k : m + k;
     }
     h.monto = m;
     const v = document.getElementById('monto-v');
@@ -246,6 +252,9 @@
     const h = App.h; const S = App.state;
     const monto = App.montoNum(h);
     if (!(monto > 0)) return App.toast('Escribe un monto', 'error');
+    // caja fuerte: gastar o sacar de un sobre con candado pide escribir "Confirmar"
+    const sc = h.modo === 'gasto' ? App.sobre(h.espacio, h.sobre) : h.modo === 'mover' && h.moverModo !== 'cuentas' ? App.sobre(h.espacio, h.deSobre) : null;
+    if (sc && sc.candado && h.candadoOk !== sc.id) return App.abrirHoja('candado', { sobre: sc.id, nombre: sc.icono + ' ' + sc.nombre, monto }, true);
     let sonido = '';
     if (h.modo === 'mover') {
       if (h.moverModo === 'cuentas') {
@@ -341,6 +350,7 @@
     if (sonido) U.sonido(sonido);
     U.haptic(sonido === 'alerta' ? 'alerta' : '');
     App.cerrarHoja(true);
+    App.autoCubrir();
     App.render();
   };
 

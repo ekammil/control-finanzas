@@ -126,8 +126,8 @@
     render: (h) => {
       const e = App.espacio(h.id); if (!e) return '';
       const c = App.calc(); const x = c.esp[e.id];
-      let y = '<div class="hero" style="margin-top:4px"><div class="etiqueta">Total en ' + U.esc(e.nombre) + '</div><div class="grande" style="font-size:38px">' + App.montoGrande(x.total) + '</div>' +
-        '<div class="mini-totales" style="margin-top:8px"><div><span>Libre</span><b class="num ' + (x.libre < -0.004 ? 'neg' : '') + '">' + U.money(x.libre) + '</b></div><div><span>En sobres</span><b class="num">' + U.money(x.enSobres) + '</b></div>' +
+      let y = '<div class="hero" style="margin-top:4px"><div class="etiqueta">Dinero en ' + U.esc(e.nombre) + '</div><div class="grande" style="font-size:38px">' + App.montoGrande(x.real) + '</div>' +
+        '<div class="mini-totales" style="margin-top:8px"><div><span>Libre</span><b class="num ' + (x.libre < -0.004 ? 'neg' : '') + '">' + U.money(x.libre) + '</b></div><div><span>Apartado</span><b class="num">' + U.money(x.real - x.libre) + '</b></div>' +
         (x.falta > 0 ? '<div><span>Falta apartar</span><b class="num cuidado">' + U.money(x.falta) + '</b></div>' : '') + '</div></div>';
       y += '<div class="dos" style="margin-top:16px">' +
         '<button class="btn sec" style="margin:0" data-a="repartir" data-id="' + e.id + '" ' + (x.libre > 0 && x.falta > 0 ? '' : 'disabled') + '>✨ Repartir</button>' +
@@ -141,7 +141,7 @@
         const clase = (s.tipo === 'gasto' || s.tipo === 'limite') ? st.estado : (s.meta > 0 ? 'azul' : st.estado);
         const conBarra = ((s.tipo === 'gasto' || s.tipo === 'limite') && st.cuota > 0) || s.meta > 0 || s.tipo === 'deuda';
         y += '<button class="fila" data-a="hoja" data-h="sobre" data-esp="' + e.id + '" data-id="' + s.id + '" data-apilar="1">' +
-          '<div class="ico">' + U.esc(s.icono) + '</div><div class="txt"><b>' + U.esc(s.nombre) + (s.disponible ? ' <small style="display:inline;color:var(--green)">· disponible</small>' : '') + '</b><small>' + subCorto(s, st) + '</small>' +
+          '<div class="ico">' + U.esc(s.icono) + '</div><div class="txt"><b>' + U.esc(s.nombre) + (s.disponible ? ' <small style="display:inline;color:var(--green)">· libre</small>' : '') + (s.candado ? ' 🔒' : '') + '</b><small>' + subCorto(s, st) + '</small>' +
           (conBarra ? App.barraProg(p, clase) : '') + '</div>' +
           '<div class="der"><b class="num ' + (st.saldo < -0.004 ? 'neg' : '') + '">' + U.money(st.saldo) + '</b>' + (s.tipo === 'tarjeta' && st.saldo < -0.004 ? '<small>por juntar</small>' : '') + '</div></button>';
       });
@@ -384,7 +384,7 @@
     render: (h) => {
       let y = '<label class="campo"><span>Nombre</span><input data-m="nombre" value="' + U.esc(h.nombre) + '" placeholder="Ej. Negocio, Personal, Horno" maxlength="30"></label>';
       y += emojiPicker(h.icono);
-      y += '<label class="interruptor"><div class="txt"><b>Cuenta para mi "Disponible"</b><small>Actívalo para tu dinero personal. Para un negocio, normalmente no.</small></div><span class="sw"><input type="checkbox" data-m="enDisponible" ' + (h.enDisponible ? 'checked' : '') + '><i></i></span></label>';
+      y += '<label class="interruptor"><div class="txt"><b>Cuenta para mi "Libre para gastar hoy"</b><small>Actívalo para tu dinero personal. Para un negocio, normalmente no.</small></div><span class="sw"><input type="checkbox" data-m="enDisponible" ' + (h.enDisponible ? 'checked' : '') + '><i></i></span></label>';
       y += '<button class="btn" data-a="espacio-guardar">' + I.check + 'Guardar</button>';
       if (h.id) y += '<button class="btn peligro" data-a="espacio-borrar">' + I.trash + 'Eliminar espacio</button>';
       return y;
@@ -477,7 +477,8 @@
       }
       if (esGasto) y += '<label class="campo"><span>' + I.bell + ' Avisarme cuando quede poco</span>' + selAlerta(h.alerta, App.state.ajustes.alertaSobre, 'data-m="alerta"') + '<small>' + (h.fechaPago ? 'En pagos con fecha solo te aviso si te pasas.' : 'Te aviso al registrar un gasto y en "Para ti".') + '</small></label>';
       y += emojiPicker(h.icono);
-      if (h.tipo !== 'tarjeta') y += '<label class="interruptor"><div class="txt"><b>Cuenta como disponible</b><small>Actívalo si este dinero lo puedes gastar en lo que quieras (como Ocio).</small></div><span class="sw"><input type="checkbox" data-m="disponible" ' + (h.disponible ? 'checked' : '') + '><i></i></span></label>';
+      if (h.tipo !== 'tarjeta') y += '<label class="interruptor"><div class="txt"><b>Cuenta en "Libre para gastar hoy"</b><small>Actívalo si este dinero lo puedes gastar en lo que quieras (como Ocio).</small></div><span class="sw"><input type="checkbox" data-m="disponible" ' + (h.disponible ? 'checked' : '') + '><i></i></span></label>';
+      if (h.tipo !== 'tarjeta') y += '<label class="interruptor"><div class="txt"><b>🔒 Caja fuerte</b><small>Para gastar o sacar dinero de este sobre habrá que escribir la palabra Confirmar. Sirve para no tocar tus ahorros por impulso.</small></div><span class="sw"><input type="checkbox" data-m="candado" ' + (h.candado ? 'checked' : '') + '><i></i></span></label>';
       y += '<button class="btn" data-a="sobre-guardar">' + I.check + 'Guardar</button>';
       if (h.id) y += '<button class="btn peligro" data-a="sobre-borrar">' + I.trash + 'Eliminar sobre</button>';
       return y;

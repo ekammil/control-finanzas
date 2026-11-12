@@ -17,6 +17,14 @@
       if (s.tipo === 'tarjeta') tarjetaDe[e.id + '|' + s.cuenta] = s.id;
     }));
     const exc = {}; // lo que cada sobre se pasó y salió de lo libre (sin cubrir todavía)
+    // lo que se debe en tarjetas de crédito, por espacio: dinero real del espacio = su total + esto
+    const cred = {}; S.cuentas.forEach((c) => { if (App.esCredito(c)) cred[c.id] = 1; });
+    const deu = {}; S.espacios.forEach((e) => { deu[e.id] = 0; });
+    const pagaDeu = (v) => {
+      S.espacios.forEach((e) => { const x = Math.min(v, Math.max(0, deu[e.id])); deu[e.id] -= x; v -= x; });
+      const p = S.espacios.find((e) => e.enDisponible) || S.espacios[0];
+      if (p && Math.abs(v) > 0.004) deu[p.id] -= v;
+    };
     const libreDe = (eid) => esp[eid] - Object.keys(sob).reduce((t2, k) => t2 + (sobEsp[k] === eid ? sob[k] : 0), 0);
     const valido = (espId, sobreId) => sobreId && sob[sobreId] !== undefined && sobEsp[sobreId] === espId;
     const parte = (id, sub, v) => { if (partes[id]) partes[id][sub === 'm' ? 'm' : 'b'] += v; };
@@ -28,6 +36,7 @@
         const delta = (t === 'gasto' ? -1 : 1) * v;
         if (cuentas[m.cuenta] !== undefined) { cuentas[m.cuenta] += delta; parte(m.cuenta, m.sub, delta); }
         if (esp[m.espacio] !== undefined) esp[m.espacio] += delta;
+        if (cred[m.cuenta] && deu[m.espacio] !== undefined) deu[m.espacio] -= delta;
         const tId = m.diferido && delta < 0 ? tarjetaDe[m.espacio + '|' + m.cuenta] : null;
         if (tId) {
           // compra (o deuda) a pagar poco a poco: no sale de ningún sobre, se junta después
@@ -49,6 +58,8 @@
       if (t === 'traspaso') {
         if (cuentas[m.cuenta] !== undefined) { cuentas[m.cuenta] -= v; parte(m.cuenta, m.sub, -v); }
         if (cuentas[m.cuenta2] !== undefined) { cuentas[m.cuenta2] += v; parte(m.cuenta2, m.sub2, v); }
+        if (cred[m.cuenta]) pagaDeu(-v);
+        if (cred[m.cuenta2]) pagaDeu(v);
         return;
       }
       if (t === 'mover') {
@@ -76,7 +87,7 @@
         }
       }
     }
-    return { cuentas, partes, esp, sob, sobEsp, aplicar, exc };
+    return { cuentas, partes, esp, sob, sobEsp, aplicar, exc, deu };
   }
 
   const esTarj = (s) => s && s.tipo === 'tarjeta';
@@ -85,11 +96,12 @@
   /* Disponible = libre + sobres marcados "disponible", solo en espacios que cuentan para disponible */
   function resumir(E) {
     const S = App.state;
-    let total = 0, disponible = 0, ahorro = 0, deudaTarjeta = 0, porJuntar = 0;
+    let total = 0, disponible = 0, ahorro = 0, deudaTarjeta = 0, porJuntar = 0, credito = 0;
     S.cuentas.forEach((c) => {
       const v = E.cuentas[c.id] || 0;
       total += v;
       if (App.esCredito(c) && v < 0) deudaTarjeta -= v;
+      if (App.esCredito(c)) credito += v;
     });
     S.espacios.forEach((e) => {
       let noDisp = 0;
@@ -102,7 +114,9 @@
       if (e.enDisponible) disponible += (E.esp[e.id] || 0) - noDisp;
     });
     // lo que falta juntar de la tarjeta no se resta de "Apartado": se muestra aparte como deuda
-    return { total: U.r2(total), disponible: U.r2(disponible), ahorro: U.r2(ahorro), apartado: U.r2(total - disponible - ahorro + porJuntar), deudaTarjeta: U.r2(deudaTarjeta), porJuntar: U.r2(porJuntar) };
+    return { total: U.r2(total), disponible: U.r2(disponible), ahorro: U.r2(ahorro), apartado: U.r2(total - disponible - ahorro + porJuntar), deudaTarjeta: U.r2(deudaTarjeta), porJuntar: U.r2(porJuntar),
+      // dinero real = lo que hay en las cuentas que no son de crédito. Siempre: real = apartadoReal + disponible
+      real: U.r2(total - credito), apartadoReal: U.r2(U.r2(total - credito) - U.r2(disponible)) };
   }
 
   /* ---------- libro por sobre: qué pasó y cuándo ---------- */
@@ -414,7 +428,8 @@
       espOut[e.id] = {
         total, enSobres: U.r2(enSobres), libre: U.r2(total - enSobres),
         gastadoSemana: U.r2(espSemana[e.id].gastado), ingresadoSemana: U.r2(espSemana[e.id].ingresado),
-        presupuesto: U.r2(presupuesto), falta: U.r2(falta)
+        presupuesto: U.r2(presupuesto), falta: U.r2(falta),
+        deu: U.r2(E.deu[e.id]), real: U.r2(total + U.r2(E.deu[e.id]))
       };
       // lo que cada sobre se pasó y todavía no se cubre (sale de lo libre en negativo)
       e.sobres.forEach((s) => { if (sobOut[s.id]) sobOut[s.id].porCubrir = U.r2(Math.min(E.exc[s.id] || 0, Math.max(0, -espOut[e.id].libre))); });
@@ -425,7 +440,8 @@
   };
 
   /* Serie del dinero disponible para la gráfica */
-  App.serie = (rango) => {
+  App.serie = (rango, campo) => {
+    const val = (E) => resumir(E)[campo === 'real' ? 'real' : 'disponible'];
     const S = App.state;
     const hoy = U.today();
     const dias = rango === 'mes' ? 30 : rango === 'semana' ? 7 : 1;
@@ -434,7 +450,7 @@
     const movs = ordenar(S.movs.filter((m) => m.fecha <= hoy));
     let i = 0;
     for (; i < movs.length && movs[i].fecha < desde; i++) E.aplicar(movs[i]);
-    const puntos = [{ x: 0, v: resumir(E).disponible, label: 'inicio' }];
+    const puntos = [{ x: 0, v: val(E), label: 'inicio' }];
     if (rango === 'hoy') {
       const minuto = (m) => (m && m.fecha === hoy ? Math.floor(m.creado / 60000) : -1);
       for (; i < movs.length; i++) {
@@ -443,16 +459,16 @@
         if (i + 1 < movs.length && minuto(movs[i + 1]) === minuto(movs[i])) continue;
         const d = new Date(movs[i].creado);
         const frac = movs[i].fecha === hoy ? (d.getHours() * 60 + d.getMinutes()) / 1440 : 0;
-        puntos.push({ x: frac, v: resumir(E).disponible });
+        puntos.push({ x: frac, v: val(E) });
       }
       const n = new Date();
-      puntos.push({ x: (n.getHours() * 60 + n.getMinutes()) / 1440, v: resumir(E).disponible, label: 'ahora' });
+      puntos.push({ x: (n.getHours() * 60 + n.getMinutes()) / 1440, v: val(E), label: 'ahora' });
       return { puntos, max: 1 };
     }
     for (let d = 0; d < dias; d++) {
       const f = U.addDays(desde, d);
       for (; i < movs.length && movs[i].fecha <= f; i++) E.aplicar(movs[i]);
-      puntos.push({ x: d + 1, v: resumir(E).disponible, label: f });
+      puntos.push({ x: d + 1, v: val(E), label: f });
     }
     return { puntos, max: dias };
   };

@@ -37,7 +37,7 @@
       vibracion: true,
       cuadreNoche: false,
       horaCuadre: 21,
-      repartirSolo: true, autoCubrir: false,
+      repartirSolo: true, autoCubrir: true, balV2: 1, privado: false, diaCero: 1, grafica: 'real', ultimoMes: '',
       notifPagos: true,
       notifCuadre: true,
       notifPasado: true,
@@ -78,6 +78,8 @@
   App.migrate = (s) => {
     const d = App.defaultState();
     const vieja = (s.v || 1) < 2;
+    // auto-balanceo: encendido por defecto también para quien ya usaba la app (una sola vez)
+    if (s.ajustes && !s.ajustes.balV2) s.ajustes.autoCubrir = true;
     s.ajustes = Object.assign({}, d.ajustes, s.ajustes || {});
     s.perfil = Object.assign({}, d.perfil, s.perfil || {});
     ['cuentas', 'espacios', 'movs', 'recurrentes', 'bandeja', 'borrados'].forEach((k) => { if (!Array.isArray(s[k])) s[k] = []; });

@@ -9,7 +9,8 @@
     const S = App.state;
     const c = App.calc();
     const rango = S.ajustes.rango || 'semana';
-    const serie = App.serie(rango);
+    const graf = S.ajustes.grafica === 'libre' ? 'libre' : 'real';
+    const serie = App.serie(rango, graf === 'real' ? 'real' : 'disponible');
     const cmp = App.comparar(rango);
     const neto = cmp.actual.neto;
     const nombreRango = { hoy: 'hoy', semana: 'últimos 7 días', mes: 'últimos 30 días' }[rango];
@@ -23,20 +24,11 @@
     h += '<div class="top"><div class="saludo">' + U.saludo() + nombre + '</div>' +
       '<div style="display:flex;gap:8px">' +
       (S.ajustes.pin ? '<button class="icon-btn" data-a="bloquear" aria-label="Bloquear">' + I.lock + '</button>' : '') +
+      '<button class="icon-btn" data-a="privado" aria-label="' + (S.ajustes.privado ? 'Mostrar montos' : 'Ocultar montos') + '">' + (S.ajustes.privado ? I.eyeOff : I.eye) + '</button>' +
       '<button class="icon-btn campana" data-a="hoja" data-h="avisos" aria-label="Notificaciones">' + I.bell + (App.nAvisos ? '<i class="punto">' + (App.nAvisos > 9 ? '9+' : App.nAvisos) + '</i>' : '') + '</button>' +
       '<button class="icon-btn" data-a="hoja" data-h="cuadre" aria-label="Cuadrar">' + I.scale + '</button></div></div>';
 
-    h += '<div class="hero"><div class="etiqueta">Disponible</div>' +
-      '<div class="grande">' + App.montoGrande(c.tot.disponible) + '</div>' +
-      '<span class="delta ' + dClase + '">' + (neto > 0 ? I.arrowUp : neto < 0 ? I.arrowDown : '') + '<span class="num">' + U.money(Math.abs(neto)) + '</span></span>' +
-      '<span class="delta-sub">' + nombreRango + ' · ' + antes + ': ' + (cmp.anterior.neto >= 0 ? '+' : '−') + U.money0(Math.abs(cmp.anterior.neto)) + '</span>' +
-      '<div class="mini-totales">' +
-      '<div><span>Ahorrado</span><b class="num">' + U.moneyShort(c.tot.ahorro) + '</b></div>' +
-      '<div><span>Apartado</span><b class="num">' + U.moneyShort(c.tot.apartado) + '</b></div>' +
-      // lo que aún falta juntar para la tarjeta (lo ya juntado está en su sobre): así Disponible + Ahorrado + Apartado − esto = Total
-      (c.tot.porJuntar > 0.004 ? '<div><span>Tarjeta por juntar</span><b class="num neg">−' + U.moneyShort(c.tot.porJuntar) + '</b></div>' : '') +
-      '<div><span>Total</span><b class="num">' + U.moneyShort(c.tot.total) + '</b></div>' +
-      '</div></div>';
+    h += App.heroInicio(c, graf, { dClase, neto, nombreRango, antes, cmp });
 
     h += '<div class="grafica">' + App.graficaSVG(serie, ancho) + '</div>';
     h += '<div class="rangos">' + ['hoy', 'semana', 'mes'].map((r) => '<button class="' + (r === rango ? 'on' : '') + '" data-a="rango" data-r="' + r + '">' + { hoy: 'Hoy', semana: 'Semana', mes: 'Mes' }[r] + '</button>').join('') + '</div>';
@@ -64,7 +56,7 @@
         '<div class="txt"><b>' + U.esc(e.nombre) + '</b><small>' +
         (x.presupuesto > 0 ? 'Gastado ' + U.money0(x.gastadoSemana) + ' de ' + U.money0(x.presupuesto) : e.sobres.length + ' sobres') +
         (pasados ? ' · <span class="pasado">' + pasados + ' en rojo</span>' : '') + '</small></div>' +
-        '<div class="der"><b class="num">' + U.money(x.total) + '</b><small class="num ' + (x.libre < -0.004 ? 'neg' : '') + '">Libre ' + U.money(x.libre) + '</small></div></button>';
+        '<div class="der"><b class="num">' + U.money(x.real) + '</b><small class="num ' + (x.libre < -0.004 ? 'neg' : '') + '">Libre ' + U.money(x.libre) + '</small></div></button>';
     });
     h += '</div>';
 
@@ -98,6 +90,7 @@
     const out = [];
     const prio = []; // importantes: pagos, tarjeta y límites de sobre (no se quitan, solo se esconden)
     const hoy = U.today();
+    App.avisosBal().forEach((x) => out.push(x));
     // bandeja de Apple Pay
     S.bandeja.forEach((b) => {
       out.push('<div class="aviso"><div class="ico">' + I.inbox + '</div><div class="txt"><b>Pago con tarjeta: ' + U.money(b.monto) + '</b><p>' + U.esc(b.comercio || 'Sin comercio') + ' · ' + U.fechaRel(b.fecha || hoy) + '</p>' +
@@ -284,11 +277,12 @@
       fila('hoja', I.layers, 'Espacios y sobres', S.espacios.length + ' espacios · ' + S.espacios.reduce((n, e) => n + e.sobres.length, 0) + ' sobres', 'data-h="organizar"') +
       fila('hoja', I.wallet, 'Cuentas', S.cuentas.map((c) => c.nombre).join(', ') || 'Ninguna', 'data-h="cuentas"') +
       fila('hoja', I.cal, 'Cada cuánto recibes dinero', U.FREC_TXT[a.frecIngreso] || 'Semanal', 'data-h="frec-ingreso"') +
+      fila('hoja', I.cal, 'Día en que empieza tu mes', 'Día ' + (a.diaCero || 1) + ' de cada mes', 'data-h="dia-cero"') +
       fila('ir', I.target, 'Próximos pagos', 'Fechas de pago y avisos', 'data-p="metas"') + '</div>';
     h += '<div class="seccion"><div class="seccion-titulo"><h2>Hábitos</h2></div>' +
       sw('cuadreNoche', 'Cuadre de la noche', 'Desde las ' + App.horaTxt(a.horaCuadre) + ' te sugiere revisar tu dinero real') +
       sw('repartirSolo', 'Repartir solo', 'Lo que te entre y lo que quede libre se aparta solo en tus sobres') +
-      sw('autoCubrir', 'Cubrir solo', 'Si un pago vence en 2 días y no alcanza, toma dinero del sobre más lejano (nunca tarjeta ni deuda)') + fila('hoja', I.bell, 'Notificaciones', App.notifPermitidas() ? 'Activadas' : 'Avisos en el celular', 'data-h="avisos"') +
+      sw('autoCubrir', 'Auto-balanceo', 'Si te pasas en un sobre, el faltante sale solo de Ocio, luego Ahorro y al final Colchón. Te aviso y lo puedes deshacer') + fila('hoja', I.bell, 'Notificaciones', App.notifPermitidas() ? 'Activadas' : 'Avisos en el celular', 'data-h="avisos"') +
       fila('hoja', I.bell, 'Alertas', a.alertas === false ? 'Desactivadas' : 'Sobres al ' + a.alertaSobre + '% · tarjetas al ' + a.alertaTarjeta + '%', 'data-h="alertas"') +
       sw('sonidos', 'Sonidos', 'Al gastar, al recibir dinero y en alertas') +
       sw('vibracion', 'Vibración', 'Al guardar y en alertas') + '</div>';
@@ -300,7 +294,7 @@
       fila('hoja', I.phone, 'Instalar en tu teléfono', 'iPhone y Android', 'data-h="instalar"') +
       fila('hoja', I.apple, 'Atajos del iPhone', 'Gasto rápido y Apple Pay', 'data-h="atajo"') + '</div>';
     h += '<div class="seccion"><button class="btn peligro" data-a="hoja" data-h="borrar">Borrar todos mis datos</button>' +
-      '<p class="nota" style="text-align:center">Control de Finanzas · v1.4 · Tus datos viven en este teléfono.</p></div>';
+      '<p class="nota" style="text-align:center">Control de Finanzas · v1.6 · Tus datos viven en este teléfono.</p></div>';
     h += '</div>';
     return h;
   };

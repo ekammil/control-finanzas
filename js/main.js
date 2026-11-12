@@ -218,7 +218,7 @@
           App.ui.pinIn = ''; App.ui.abriendo = true;
           U.sonido('abrir');
           const b = document.querySelector('.bloqueo');
-          const abrir = () => { App.ui.abriendo = false; App.ui.bloqueado = false; refrescar(); };
+          const abrir = () => { App.ui.abriendo = false; App.ui.bloqueado = false; refrescar(); App.balPendiente(); App.revisarMes(); };
           if (b && !U.sinMovimiento()) { b.classList.add('abriendo'); setTimeout(abrir, 420); } else abrir();
           return;
         }
@@ -329,7 +329,8 @@
         fechaPago: h.tipo === 'gasto' ? (h.fechaPago || '') : '', avisar: Number(h.avisar) || 0,
         aporteManual: (esGasto || h.tipo === 'deuda') && h.manual ? num(h.aporteManual) : '',
         alerta: esGasto ? (h.alerta || '') : '',
-        pct: h.tipo === 'porIngreso' && h.porPct ? Math.min(100, num(h.pct)) : 0
+        pct: h.tipo === 'porIngreso' && h.porPct ? Math.min(100, num(h.pct)) : 0,
+        candado: h.tipo !== 'tarjeta' && !!h.candado
       };
       if (h.tipo === 'porIngreso' && !(datos.pct > 0) && !(datos.cuota > 0)) return App.toast(h.porPct ? 'Escribe el porcentaje' : 'Escribe la cantidad', 'error');
       if (h.tipo === 'deuda' && (!(datos.meta > 0) || !datos.hasta)) return App.toast('Pon el total y la fecha límite', 'error');
@@ -462,6 +463,269 @@
       App.cerrarHoja(true); App.ui.pantalla = 'inicio'; refrescar();
     }
   };
+  /* ================= v1.6: dinero real, auto-balanceo, privacidad, caja fuerte, día cero y cierre de mes ================= */
+  const svgI = (p) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>';
+  const OJO = '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
+  App.I.eye = svgI(OJO);
+  App.I.eyeOff = svgI(OJO + '<path d="M3 3l18 18"/>');
+
+  /* Inicio: solo dos cifras. Dinero real (lo que hay en tus cuentas) = Apartado + Libre para gastar hoy */
+  App.heroInicio = (c, graf, d) => {
+    const S = App.state; const t = c.tot; const I = App.I;
+    // de qué está hecho "Libre": dinero sin sobre + sobres marcados como libres (Ocio)
+    let sin = 0; const libres = [];
+    S.espacios.forEach((e) => {
+      if (!e.enDisponible) return;
+      sin += c.esp[e.id].libre;
+      e.sobres.forEach((s) => { if (s.disponible && s.tipo !== 'tarjeta') libres.push(s.nombre + ' ' + U.money0(Math.max(0, c.sob[s.id].saldo))); });
+    });
+    const falta = t.disponible < -0.004;
+    const comp = falta ? 'Tus sobres piden más dinero del que hay' : libres.length ? libres.join(' + ') + ' + sin sobre ' + U.money0(sin) : 'Dinero que no está en ningún sobre';
+    const tam = (v) => (U.money(v).length > 9 ? ' chico' : '');
+    const pct = t.real > 0 ? U.clamp(t.disponible / t.real, 0, 1) * 100 : 0;
+    const tarjetas = S.cuentas.filter((ct) => App.esCredito(ct) && c.cuentas[ct.id] < -0.004);
+    let h = '<div class="hero"><div class="duo">' +
+      '<button class="duo-c' + (graf === 'real' ? ' on' : '') + '" data-a="grafica" data-v="real"><span class="etiqueta">Dinero real</span><span class="grande' + tam(t.real) + '">' + App.montoGrande(t.real) + '</span><small>Lo que hay en tus cuentas</small></button>' +
+      '<button class="duo-c' + (graf === 'libre' ? ' on' : '') + '" data-a="grafica" data-v="libre"><span class="etiqueta">' + (falta ? 'Te falta cubrir' : 'Libre para gastar hoy') + '</span><span class="grande' + tam(t.disponible) + (falta ? ' neg' : '') + '">' + App.montoGrande(Math.abs(t.disponible)) + '</span><small>' + U.esc(comp) + '</small></button></div>' +
+      '<button class="reparto" data-a="hoja" data-h="apartado" aria-label="Ver en qué está apartado tu dinero"><i class="reparto-barra"><i style="width:' + pct.toFixed(1) + '%"></i></i>' +
+      '<span><b>Apartado ' + U.money0(t.apartadoReal) + '</b> · ver ›</span><span>Libre ' + U.money0(Math.max(0, t.disponible)) + '</span></button>';
+    if (tarjetas.length) h += '<p class="debes">💳 Debes ' + U.money0(t.deudaTarjeta) + ' en ' + U.esc(tarjetas.map((ct) => ct.nombre).join(' y ')) + ' · ya tienes apartados ' + U.money0(Math.max(0, t.deudaTarjeta - t.porJuntar)) + '. No se resta de tu dinero real.</p>';
+    h += '<span class="delta ' + d.dClase + '">' + (d.neto > 0 ? I.arrowUp : d.neto < 0 ? I.arrowDown : '') + '<span class="num">' + U.money(Math.abs(d.neto)) + '</span></span>' +
+      '<span class="delta-sub">' + d.nombreRango + ' · ' + d.antes + ': ' + (d.cmp.anterior.neto >= 0 ? '+' : '−') + U.money0(Math.abs(d.cmp.anterior.neto)) + '</span></div>';
+    return h;
+  };
+
+  /* En qué está apartado el dinero real. La suma de todo siempre da tot.apartadoReal (se prueba en las simulaciones) */
+  App.desglose = (c) => {
+    const g = { pagos: [], diario: [], guardado: [], negocio: [] };
+    App.state.espacios.forEach((e) => {
+      const x = c.esp[e.id];
+      if (!e.enDisponible) { if (Math.abs(x.real) > 0.004) g.negocio.push({ n: e.icono + ' ' + e.nombre, v: x.real }); return; }
+      let tarj = x.deu;
+      e.sobres.forEach((s) => {
+        const v = c.sob[s.id].saldo;
+        if (s.tipo === 'tarjeta') { tarj += v; return; }
+        if (s.disponible || !(v > 0.004)) return; // los "libres" (Ocio) ya van en Libre para gastar
+        (s.tipo === 'deuda' || s.fechaPago ? g.pagos : s.tipo === 'ahorro' || s.tipo === 'porIngreso' ? g.guardado : g.diario).push({ n: s.icono + ' ' + s.nombre + (s.candado ? ' 🔒' : ''), v });
+      });
+      if (Math.abs(tarj) > 0.004) g.pagos.unshift({ n: '💳 Para pagar tarjetas', v: U.r2(tarj) });
+    });
+    return g;
+  };
+  App.HOJAS.apartado = {
+    titulo: 'Tu dinero real',
+    render: () => {
+      const c = App.calc(); const t = c.tot; const g = App.desglose(c);
+      const fila = (o) => '<div class="fila"><div class="txt"><b>' + U.esc(o.n) + '</b></div><div class="der"><b class="num">' + U.money(o.v) + '</b></div></div>';
+      const grupo = (titulo, l) => (l.length ? '<div class="etq">' + titulo + ' · ' + U.money(l.reduce((s, o) => s + o.v, 0)) + '</div>' + l.map(fila).join('') : '');
+      return '<p class="nota" style="margin-top:0">Tienes <b>' + U.money(t.real) + '</b> en tus cuentas. De eso, <b>' + U.money(t.apartadoReal) + '</b> ya tiene destino y <b>' + U.money(t.disponible) + '</b> está libre para gastar.</p>' +
+        grupo('Pagos y deudas', g.pagos) + grupo('Gastos del día a día', g.diario) + grupo('Guardado', g.guardado) + grupo('Negocio', g.negocio) +
+        '<p class="nota">Las tarjetas de crédito no cuentan como dinero: lo que debes aparece aquí solo como dinero apartado para pagarlas.</p>';
+    }
+  };
+
+  /* ---------------- auto-balanceo ----------------
+     Si te pasas del presupuesto de un sobre y falta dinero (o un pago vence en 2 días y no alcanza), el faltante sale solo,
+     en este orden: 1° Ocio (sobres "libres"), 2° Ahorro, 3° Colchón. Nunca de tarjeta, deudas ni otros gastos. */
+  // shortcut: el Colchón se reconoce por nombre o ícono; si alguien lo nombra distinto cuenta como Ahorro. Volverlo opción del sobre si hace falta
+  const esColchon = (o) => /colch|emergenc/i.test(o.nombre) || o.icono === '🛟';
+  const nivelBal = (o) => (o.tipo === 'ahorro' ? (esColchon(o) ? 3 : 2) : o.disponible && (o.tipo === 'gasto' || o.tipo === 'limite') ? 1 : 0);
+  const cuandoTxt = (d) => (d === 0 ? 'hoy' : d === 1 ? 'mañana' : 'en ' + d + ' días');
+  const txtBal = (av) => ({
+    titulo: 'Moví ' + U.money(av.partes.reduce((s, p) => s + p.monto, 0)) + ' a ' + av.a,
+    cuerpo: (av.motivo === 'pago' ? av.a + ' se paga ' + cuandoTxt(av.dias) + ' y le faltaban ' + U.money(av.pedia) + '.' : 'Te pasaste ' + U.money(av.pedia) + ' del presupuesto de ' + av.a + '.') +
+      ' Para cubrirlo tomé ' + av.partes.map((p) => U.money(p.monto) + ' de ' + p.de + ' (le quedan ' + U.money(p.queda) + ')').join(' y ') + '.' +
+      (av.falta > 0.004 ? ' Todavía faltan ' + U.money(av.falta) + ': ya no había más en Ocio, Ahorro ni Colchón.' : '')
+  });
+  App.autoCubrir = () => {
+    const S = App.state; const a = S.ajustes;
+    if (!a.autoCubrir || a.onboarding || !S.cuentas.length) return [];
+    const hoy = U.today(); const no = a.balNo || {}; const visto = {}; const avisos = [];
+    const pendientes = (c) => {
+      const out = [];
+      S.espacios.forEach((e) => e.sobres.forEach((s) => {
+        const st = c.sob[s.id];
+        if (!st || !(s.tipo === 'gasto' || s.tipo === 'limite')) return;
+        const M = s.fechaPago ? st.M : st.Mc;
+        // solo si te pasaste del presupuesto Y por eso falta dinero de verdad (lo libre quedó en negativo)
+        const falta = M > 0 && st.gastadoCiclo > M + 0.004 ? U.r2(st.porCubrir || 0) : 0;
+        if (falta > 0.004) out.push({ e, s, falta, clave: st.cIni, motivo: 'pasaste' });
+      }));
+      App.proximosPagos(c).forEach((p) => {
+        if (p.tipo !== 'sobre' || p.dias < 0 || p.dias > 2) return;
+        const e = App.espacio(p.r.espacio); const s = e && e.sobres.find((x) => x.id === p.r.sobre); const st = s && c.sob[s.id];
+        const falta = st ? U.r2(p.r.monto - st.saldo) : 0;
+        if (falta > 0.004) out.push({ e, s, falta, clave: p.fecha, motivo: 'pago', dias: p.dias });
+      });
+      // lo que deshiciste no se vuelve a mover en ese mismo periodo
+      return out.filter((n) => no[n.s.id] !== n.clave && !visto[n.s.id + n.clave]);
+    };
+    for (let g = 0; g < 30; g++) {
+      const c = App.calc(); const n = pendientes(c)[0];
+      if (!n) break;
+      visto[n.s.id + n.clave] = 1;
+      let falta = n.falta; const partes = []; const ids = [];
+      n.e.sobres.filter((o) => o.id !== n.s.id && nivelBal(o) > 0 && c.sob[o.id] && c.sob[o.id].saldo > 0.004)
+        .sort((x, y) => nivelBal(x) - nivelBal(y) || (x.meta > 0 ? 1 : 0) - (y.meta > 0 ? 1 : 0) || c.sob[y.id].saldo - c.sob[x.id].saldo)
+        .forEach((o) => {
+          if (!(falta > 0.004)) return;
+          const x = U.r2(Math.min(falta, c.sob[o.id].saldo));
+          const m = App.nuevoMov({ fecha: hoy, tipo: 'mover', monto: x, espacio: n.e.id, sobre: o.id, espacio2: n.e.id, sobre2: n.s.id, nota: 'Auto-balanceo: ' + n.s.nombre, bal: 1 });
+          S.movs.push(m); ids.push(m.id);
+          partes.push({ de: o.nombre, monto: x, queda: U.r2(c.sob[o.id].saldo - x) });
+          falta = U.r2(falta - x);
+        });
+      if (partes.length) avisos.push({ id: U.uid(), fecha: hoy, sobre: n.s.id, clave: n.clave, a: n.s.nombre, motivo: n.motivo, dias: n.dias || 0, pedia: n.falta, falta, partes, movs: ids });
+    }
+    if (avisos.length) {
+      a.balAvisos = (a.balAvisos || []).concat(avisos).slice(-8);
+      App.save(); U.haptic();
+      if (!App.balPendiente()) setTimeout(() => App.toast('🔁 ' + txtBal(avisos[0]).titulo + '. Míralo o deshazlo en la campana 🔔', 'largo'), 1600);
+    }
+    return avisos;
+  };
+  // la primera vez que el auto-balanceo actúa se explica con una tarjeta completa
+  App.balPendiente = () => {
+    const a = App.state.ajustes; const av = (a.balAvisos || []).slice(-1)[0];
+    if (a.balVisto || !av || App.ui.bloqueado) return false;
+    a.balVisto = true; App.save();
+    setTimeout(() => App.abrirHoja('bal', { id: av.id }, !!App.h), 900);
+    return true;
+  };
+  const botonesBal = (av) => '<div class="acciones"><button class="btn-chico blanco" data-a="bal-ok" data-id="' + av.id + '">Entendido</button><button class="btn-chico" data-a="bal-deshacer" data-id="' + av.id + '">↩︎ Deshacer</button></div>';
+  App.avisosBal = () => (App.state.ajustes.balAvisos || []).map((av) => { const t = txtBal(av); return '<div class="aviso bal"><div class="ico">🔁</div><div class="txt"><b>' + U.esc(t.titulo) + '</b><p>' + U.esc(t.cuerpo) + '</p>' + botonesBal(av) + '</div></div>'; });
+  App.HOJAS.bal = {
+    titulo: 'Moví dinero por ti',
+    render: (h) => {
+      const av = (App.state.ajustes.balAvisos || []).find((x) => x.id === h.id);
+      if (!av) return '<p class="nota" style="text-align:center;padding:18px 0">Este movimiento ya se deshizo o se quitó.</p>';
+      const t = txtBal(av);
+      return '<p style="margin-top:0;font-size:17px"><b>' + U.esc(t.titulo) + '</b></p><p>' + U.esc(t.cuerpo) + '</p>' +
+        '<div class="cuadro-bal"><b>¿Qué pasó?</b><p>Esto es el <b>auto-balanceo</b>. Cuando gastas más de lo que tenía un sobre, la app cubre el faltante sola para que tus cuentas sigan cuadrando. No se pierde dinero: solo cambia de sobre.</p>' +
+        '<p>Siempre toma en este orden: <b>1° Ocio</b>, <b>2° Ahorro</b> y, solo si no alcanza, <b>3° Colchón</b>. Nunca toca tus deudas ni lo apartado para la tarjeta.</p>' +
+        '<p>Cada vez que pase te aviso en la campana 🔔 y lo puedes deshacer con un toque.</p></div>' +
+        '<button class="btn" data-a="bal-ok" data-id="' + av.id + '">' + App.I.check + 'Entendido</button>' +
+        '<button class="btn sec" data-a="bal-deshacer" data-id="' + av.id + '">↩︎ Deshacer este movimiento</button>' +
+        '<button class="link-peligro" data-a="bal-apagar">Apagar el auto-balanceo</button>';
+    }
+  };
+  const quitarBal = (id) => {
+    const a = App.state.ajustes;
+    a.balAvisos = (a.balAvisos || []).filter((x) => x.id !== id); App.save();
+    if (App.h && App.h._hoja === 'bal') App.cerrarHoja(true); else if (App.h) App.renderHoja();
+    refrescar();
+  };
+
+  /* ---------------- caja fuerte: sobres con candado ---------------- */
+  App.HOJAS.candado = {
+    titulo: '🔒 Caja fuerte',
+    init: (d) => Object.assign({ txt: '' }, d),
+    render: (h) => '<p style="margin-top:0">Vas a sacar <b>' + U.money(h.monto) + '</b> de <b>' + U.esc(h.nombre) + '</b>, un sobre que protegiste con candado.</p>' +
+      '<p class="nota">Respira. Si de verdad lo necesitas, escribe la palabra <b>Confirmar</b> para seguir.</p>' +
+      '<label class="campo"><span>Escribe: Confirmar</span><input data-m="txt" value="' + U.esc(h.txt) + '" autocomplete="off" autocapitalize="off" placeholder="Confirmar" aria-label="Escribe Confirmar"></label>' +
+      '<button class="btn" data-a="candado-ok">' + App.I.lock + 'Sacar el dinero</button><button class="btn sec" data-a="volver-hoja">Mejor no</button>'
+  };
+
+  /* ---------------- día cero: el día en que empieza tu mes ---------------- */
+  App.HOJAS['dia-cero'] = {
+    titulo: 'Día en que empieza tu mes',
+    init: () => ({ dia: String(App.state.ajustes.diaCero || 1) }),
+    render: (h) => '<p class="nota" style="margin-top:0">Si cobras el 15 o el 30, tu mes puede empezar ese día. Los sobres mensuales y el cierre de mes se cuentan desde ahí y no desde el día 1.</p>' +
+      '<div class="chips">' + ['1', '15', '30'].map((d) => App.chipHTML(h.dia === d, 'dia-cero', 'data-v="' + d + '"', 'Día ' + d)).join('') + '</div>' +
+      '<label class="campo"><span>Otro día (del 1 al 31)</span><input inputmode="numeric" data-m="dia" value="' + U.esc(h.dia) + '"></label>' +
+      '<p class="nota">En los meses más cortos se usa su último día.</p>' +
+      '<button class="btn" data-a="dia-cero-guardar">' + App.I.check + 'Guardar</button>'
+  };
+
+  /* ---------------- cierre de mes: en verde (confeti) o en rojo (aviso con tacto) ---------------- */
+  // Compara lo gastado en el mes que terminó contra lo planeado en los sobres de gasto. Devuelve null si no toca o no hay datos.
+  App.cierreMes = () => {
+    const S = App.state; const a = S.ajustes;
+    const ini = U.periodo('mensual', U.today()).ini;
+    if (a.ultimoMes === ini) return null;
+    const primera = !a.ultimoMes; a.ultimoMes = ini; App.save();
+    if (primera) return null;
+    const P = U.periodo('mensual', U.addDays(ini, -1));
+    // solo cuenta desde que hay movimientos (para no comparar un mes a medias contra el plan completo)
+    const desde = S.movs.reduce((u, m) => (m.fecha < u ? m.fecha : u), P.fin);
+    let plan = 0, gasto = 0, n = 0; const cuenta = {};
+    S.espacios.forEach((e) => {
+      if (!e.enDisponible) return;
+      cuenta[e.id + '|'] = 1;
+      e.sobres.forEach((s) => {
+        if (s.tipo !== 'gasto' && s.tipo !== 'limite') return;
+        cuenta[s.id] = 1;
+        const d = [P.ini, desde, s.creado || ''].sort().pop();
+        if (d < P.fin) plan += U.convertir(s.cuota, s.frecPago, 'mensual') * U.daysBetween(d, P.fin) / U.daysBetween(P.ini, P.fin);
+      });
+    });
+    S.movs.forEach((m) => {
+      if (m.tipo !== 'gasto' || m.fecha < P.ini || m.fecha >= P.fin) return;
+      if (m.sobre ? cuenta[m.sobre] : cuenta[m.espacio + '|']) { gasto += Number(m.monto); n++; }
+    });
+    if (!(plan > 0) || !n) return null;
+    return { ini: P.ini, fin: U.addDays(P.fin, -1), plan: U.r2(plan), gasto: U.r2(gasto), ok: gasto <= plan + 0.004 };
+  };
+  App.revisarMes = () => {
+    const S = App.state;
+    if (App.ui.bloqueado || S.ajustes.onboarding || !S.cuentas.length) return;
+    const r = App.cierreMes();
+    if (r) setTimeout(() => App.abrirHoja('mes', r, !!App.h), 1900);
+  };
+  App.HOJAS.mes = {
+    titulo: (h) => (h.ok ? '¡Mes en verde!' : 'Mes en rojo'),
+    render: (h) => {
+      const rango = U.fechaCorta(h.ini) + ' – ' + U.fechaCorta(h.fin); const dif = U.r2(Math.abs(h.plan - h.gasto));
+      return '<div class="mes-cara">' + (h.ok ? '🎉' : '💛') + '</div>' +
+        (h.ok ? '<p style="text-align:center;font-size:17px">Cerraste tu mes (' + rango + ') <b>por debajo de tu presupuesto</b>.</p><p class="nota" style="text-align:center">Gastaste ' + U.money(h.gasto) + ' de los ' + U.money(h.plan) + ' que planeaste. Te sobraron <b>' + U.money(dif) + '</b>. ¡Bien hecho!</p>'
+          : '<p style="text-align:center;font-size:17px">Este mes (' + rango + ') <b>te pasaste ' + U.money(dif) + '</b> de tu presupuesto.</p><p class="nota" style="text-align:center">Gastaste ' + U.money(h.gasto) + ' y tu plan era ' + U.money(h.plan) + '. Le pasa a cualquiera, y ya lo sabes: eso es lo importante. Revisa en qué sobres se fue y ajusta el plan del mes que empieza.</p>') +
+        '<button class="btn" data-a="cerrar-hoja">' + App.I.check + (h.ok ? '¡A seguir así!' : 'Entendido') + '</button>';
+    },
+    montar: (h) => {
+      if (h.hecho) return;
+      h.hecho = true;
+      const vib = App.state.ajustes.vibracion !== false && typeof navigator.vibrate === 'function';
+      if (h.ok) {
+        if (window.confetti && !U.sinMovimiento()) window.confetti({ particleCount: 150, spread: 85, origin: { y: 0.65 }, zIndex: 9999 });
+        if (vib) navigator.vibrate([50, 50, 50]); else U.haptic();
+        U.sonido('logro');
+      } else {
+        // temblor + colores apagados 3 segundos (ver html.rojo en styles.css)
+        document.documentElement.classList.add('rojo');
+        setTimeout(() => document.documentElement.classList.remove('rojo'), 3000);
+        if (vib) navigator.vibrate(600); else U.haptic('alerta');
+        U.sonido('alerta');
+      }
+    }
+  };
+
+  Object.assign(A, {
+    'grafica': (el) => { App.state.ajustes.grafica = el.dataset.v; App.save(); refrescar(); },
+    'privado': () => { const a = App.state.ajustes; a.privado = !a.privado; App.save(); U.haptic('suave'); refrescar(); },
+    'bal-ok': (el) => quitarBal(el.dataset.id),
+    'bal-deshacer': (el) => {
+      const a = App.state.ajustes; const av = (a.balAvisos || []).find((x) => x.id === el.dataset.id);
+      if (!av) return;
+      av.movs.forEach((id) => App.deleteMov(id));
+      a.balNo = Object.assign({}, a.balNo, { [av.sobre]: av.clave });
+      U.haptic();
+      App.toast('Deshecho: el dinero volvió a ' + av.partes.map((p) => p.de).join(' y '), 'ok');
+      quitarBal(av.id);
+    },
+    'bal-apagar': () => { App.state.ajustes.autoCubrir = false; App.save(); App.cerrarHoja(true); App.toast('Auto-balanceo apagado. Se prende en Ajustes → Hábitos', 'largo'); refrescar(); },
+    'candado-ok': () => {
+      if (String(App.h.txt || '').trim().toLowerCase() !== 'confirmar') return App.toast('Escribe la palabra Confirmar', 'error');
+      const id = App.h.sobre;
+      App.cerrarHoja(false);
+      if (App.h && App.h._hoja === 'registro') { App.h.candadoOk = id; App.guardarRegistro(); }
+    },
+    'dia-cero': (el) => { App.h.dia = el.dataset.v; App.renderHoja(); },
+    'dia-cero-guardar': () => {
+      const a = App.state.ajustes; const n = U.clamp(parseInt(App.h.dia, 10) || 1, 1, 31);
+      a.diaCero = n; a.ultimoMes = U.periodo('mensual', U.today()).ini; // cambiar el día no dispara un cierre de mes
+      App.save(); App.cerrarHoja(true); App.toast('Tu mes empieza el día ' + n, 'ok'); refrescar();
+    }
+  });
   Object.assign(A, App.accionesExtra || {});
   App.acciones = A;
 
@@ -588,7 +852,7 @@
     return U.r2(total);
   };
 
-  /* Cubrir solo: si un pago vence en 2 días o menos y su sobre no alcanza, toma de los sobres más lejanos de ese espacio */ App.autoCubrir = () => { const S = App.state; if (!S.ajustes.autoCubrir || S.ajustes.onboarding) return []; const hoy = U.today(); const hechos = []; const pagos = App.proximosPagos().filter((p) => p.tipo === 'sobre' && p.dias >= 0 && p.dias <= 2).sort((a, b) => a.fecha.localeCompare(b.fecha)); pagos.forEach((p) => { const sid = p.r.sobre; const eid = p.r.espacio; let c = App.calc(); const st = c.sob[sid]; let falta = U.r2(p.r.monto - (st ? st.saldo : 0)); if (!(falta > 0.004)) return; const e = App.espacio(eid); if (!e) return; const vence = (o) => { const so = c.sob[o.id]; return o.tipo === 'ahorro' && !(o.meta > 0) ? '9999' : String((so && (so.venc || so.cFin)) || '9999'); }; const fuentes = e.sobres.filter((o) => o.id !== sid && o.tipo !== 'tarjeta' && o.tipo !== 'deuda' && o.tipo !== 'porIngreso' && c.sob[o.id] && c.sob[o.id].saldo > 0.004 && vence(o) > p.fecha) .sort((a, b) => vence(b).localeCompare(vence(a)) || c.sob[b.id].saldo - c.sob[a.id].saldo); fuentes.forEach((o) => { if (!(falta > 0.004)) return; const x = U.r2(Math.min(falta, App.calc().sob[o.id].saldo)); if (!(x > 0.004)) return; S.movs.push(App.nuevoMov({ fecha: hoy, tipo: 'mover', monto: x, espacio: eid, sobre: o.id, espacio2: eid, sobre2: sid, nota: 'Auto-cubrir: ' + p.r.nombre + (p.dias ? ' en ' + p.dias + ' d' : ' hoy'), origen: 'auto' })); hechos.push({ de: o.nombre, a: p.r.nombre, monto: x }); falta = U.r2(falta - x); }); }); if (hechos.length) App.save(); return hechos; }; /* ---------------- notificaciones del celular ----------------
+  /* ---------------- notificaciones del celular ----------------
      Sin servidor: salen al abrir la app o mientras está abierta. Cada aviso se manda una sola vez. */
   App.horaTxt = (h) => { h = Number(h) || 21; return (h > 12 ? h - 12 : h) + ':00 ' + (h >= 12 ? 'pm' : 'am'); };
   App.notifPermitidas = () => 'Notification' in window && Notification.permission === 'granted';
@@ -640,7 +904,7 @@
   };
   setInterval(() => { if (!document.hidden) App.revisarNotifs(); }, 15 * 60000);
   const despuesDeAbrir = () => {
-    const rep = App.autoRepartir(); const cub = App.autoCubrir(); if (cub.length) setTimeout(() => App.toast('🔁 Cubrí ' + cub.map((h) => U.money(h.monto) + ' de ' + h.de + ' → ' + h.a).join(', '), 'ok'), 1800);
+    const rep = App.autoRepartir(); App.autoCubrir(); App.balPendiente(); App.revisarMes();
     if (rep > 0) setTimeout(() => App.toast('✨ Aparté ' + U.money(rep) + ' en tus sobres', 'ok'), 900);
     setTimeout(App.revisarNotifs, 2500);
     App.programarCuadre();

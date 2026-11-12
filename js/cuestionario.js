@@ -95,7 +95,7 @@
     gym: 'La mensualidad y la fecha de tu próximo pago.', mascota: 'Comida, veterinario y cosas de tu mascota en un mes.',
     ropa: 'Ropa, corte de pelo y cuidado personal en un mes.', salud: 'Medicinas y consultas en un mes.',
     familia: 'Lo que das para tu casa o tu familia en un mes.', regalos: 'Se junta poco a poco para cumpleaños y fechas especiales.',
-    ocio: 'Para salir y tus gustos. Este sí cuenta en tu Disponible.', colchon: 'Para emergencias: se guarda cada vez que cobras.',
+    ocio: 'Para salir y tus gustos. Este sí cuenta en tu Libre para gastar hoy.', colchon: 'Para emergencias: se guarda cada vez que cobras.',
     imprevistos: 'Para lo que no esperas (algo que se descompone, una multa…). Se junta poco a poco.',
     mercancia: 'Lo que compras para vender en una semana.', insumos: 'Ingredientes y materia prima en una semana.',
     gas: 'Gas o combustible del negocio en una semana.', materiales: 'Materiales para dar tu servicio en una semana.',

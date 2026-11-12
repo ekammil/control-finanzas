@@ -6,9 +6,13 @@
 
   const fmt = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmt0 = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  U.money = (n) => fmt.format(U.r2(n || 0));
-  U.money0 = (n) => fmt0.format(Math.round(n || 0));
+  // modo privacidad: todos los montos se tapan
+  const priv = () => !!(window.App && App.state && App.state.ajustes.privado);
+  const TAPA = '$***.**';
+  U.money = (n) => (priv() ? TAPA : fmt.format(U.r2(n || 0)));
+  U.money0 = (n) => (priv() ? TAPA : fmt0.format(Math.round(n || 0)));
   U.moneyShort = (n) => {
+    if (priv()) return TAPA;
     const a = Math.abs(n);
     if (a >= 100000) return (n < 0 ? '-' : '') + '$' + (a / 1000).toFixed(0) + 'k';
     if (a >= 10000) return (n < 0 ? '-' : '') + '$' + (a / 1000).toFixed(1) + 'k';
@@ -45,6 +49,8 @@
   const fechaYMD = (y, m, d) => { const b = new Date(y, m, 1, 12); return U.ymd(new Date(b.getFullYear(), b.getMonth(), Math.min(d, ultimoDia(b.getFullYear(), b.getMonth())), 12)); };
   U.addMonths = (s, n) => { const d = U.parse(s); return fechaYMD(d.getFullYear(), d.getMonth() + n, d.getDate()); };
 
+  // día en que empieza tu mes (Ajustes); 1 = mes de calendario
+  const diaCero = () => U.clamp(parseInt(window.App && App.state && App.state.ajustes.diaCero, 10) || 1, 1, 31);
   const EPOCA = '2024-01-01'; // los periodos de "cada N días" se cuentan desde aquí
   /* Periodo de calendario que contiene la fecha: { ini, fin } (fin = día siguiente al último) */
   U.periodo = (frec, s) => {
@@ -55,7 +61,7 @@
       case 'diario': return { ini: s, fin: U.addDays(s, 1) };
       case 'semanal': { const i = U.weekStart(s); return { ini: i, fin: U.addDays(i, 7) }; }
       case 'quincenal': return dia <= 15 ? { ini: fechaYMD(y, m, 1), fin: fechaYMD(y, m, 16) } : { ini: fechaYMD(y, m, 16), fin: fechaYMD(y, m + 1, 1) };
-      case 'mensual': return { ini: fechaYMD(y, m, 1), fin: fechaYMD(y, m + 1, 1) };
+      case 'mensual': { const k = m - (dia < Math.min(diaCero(), ultimoDia(y, m)) ? 1 : 0); return { ini: fechaYMD(y, k, diaCero()), fin: fechaYMD(y, k + 1, diaCero()) }; }
       case 'semestral': return m < 6 ? { ini: fechaYMD(y, 0, 1), fin: fechaYMD(y, 6, 1) } : { ini: fechaYMD(y, 6, 1), fin: fechaYMD(y + 1, 0, 1) };
       default: return { ini: fechaYMD(y, 0, 1), fin: fechaYMD(y + 1, 0, 1) };
     }
@@ -72,7 +78,7 @@
       case 'diario': return U.daysBetween(desde, hasta) + 1;
       case 'semanal': return Math.round(U.daysBetween(U.weekStart(desde), U.weekStart(hasta)) / 7) + 1;
       case 'quincenal': { const q = (d) => mes(d) * 2 + (d.getDate() > 15 ? 1 : 0); return q(b) - q(a) + 1; }
-      case 'mensual': return mes(b) - mes(a) + 1;
+      case 'mensual': { const mc = (d) => mes(d) - (d.getDate() < Math.min(diaCero(), ultimoDia(d.getFullYear(), d.getMonth())) ? 1 : 0); return mc(b) - mc(a) + 1; }
       case 'semestral': { const q = (d) => d.getFullYear() * 2 + (d.getMonth() >= 6 ? 1 : 0); return q(b) - q(a) + 1; }
       default: return b.getFullYear() - a.getFullYear() + 1;
     }
@@ -217,6 +223,20 @@
     if (h < 12) return 'Buenos días';
     if (h < 19) return 'Buenas tardes';
     return 'Buenas noches';
+  };
+
+  // calculadora del monto: "250+85+40" → 375. Solo + − × ÷, sin eval
+  U.calcular = (t) => {
+    const s = String(t || '').replace(/\s/g, '').replace(/[+\-*\/.]+$/, '');
+    const N = '(\\d+\\.?\\d*|\\.\\d+)';
+    if (!new RegExp('^' + N + '([+\\-*\\/]' + N + ')*$').test(s)) return 0;
+    const v = s.match(/[+\-]?[^+\-]+/g).reduce((tot, term) => {
+      const f = term.replace(/^[+\-]/, '').split(/([*\/])/);
+      let p = parseFloat(f[0]);
+      for (let i = 1; i < f.length; i += 2) p = f[i] === '*' ? p * parseFloat(f[i + 1]) : p / parseFloat(f[i + 1]);
+      return tot + (term[0] === '-' ? -p : p);
+    }, 0);
+    return isFinite(v) && v > 0 ? U.r2(v) : 0;
   };
 
   window.U = U;
