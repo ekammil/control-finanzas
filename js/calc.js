@@ -552,22 +552,22 @@
     c = c || App.calc();
     const out = [];
     const conRec = {};
+    const atras = U.addDays(hoy, -90); // hasta cuándo atrás se siguen mostrando pagos vencidos sin registrar
     S.recurrentes.forEach((r) => {
-      let f = App.siguienteFecha(r, hoy);
-      if (r.pagado && r.pagado === f) f = App.siguienteFecha(r, U.addDays(f, 1));
+      // un pago que ya pasó y no se ha registrado sigue pendiente (vencido) hasta que lo registres
+      let f = App.siguienteFecha(r, r.pagado ? [U.addDays(r.pagado, 1), atras].sort().pop() : r.creado ? [r.creado, atras].sort().pop() : hoy);
       if (r.sobre) conRec[r.sobre] = true;
       out.push({ tipo: 'rec', r, fecha: f, dias: U.daysBetween(hoy, f) });
     });
     S.espacios.forEach((e) => e.sobres.forEach((s) => {
       const st = c.sob[s.id];
       if ((s.tipo === 'gasto' || s.tipo === 'limite') && s.fechaPago && !conRec[s.id] && s.cuota > 0) {
-        // el primer pago es la fecha que pusiste: antes de ella no hay pagos
-        const desde = hoy > s.fechaPago ? hoy : s.fechaPago;
-        let f = U.siguienteVenc(s.frecPago, s.fechaPago, desde);
-        if (s.pagado && s.pagado === f) f = U.siguienteVenc(s.frecPago, s.fechaPago, U.addDays(f, 1));
+        // el primer pago es la fecha que pusiste: antes de ella no hay pagos; si ya pasó y no lo registraste, sigue pendiente (vencido)
+        const desde = [s.fechaPago, atras, s.pagado ? U.addDays(s.pagado, 1) : ''].sort().pop();
+        const f = U.siguienteVenc(s.frecPago, s.fechaPago, desde);
         out.push({ tipo: 'sobre', r: { id: s.id, nombre: s.nombre, monto: s.cuota, avisar: s.avisar, sobre: s.id, espacio: e.id, frec: s.frecPago }, fecha: f, dias: U.daysBetween(hoy, f) });
       }
-      if (s.tipo === 'deuda' && s.hasta && s.hasta >= hoy && !conRec[s.id]) {
+      if (s.tipo === 'deuda' && s.hasta && !conRec[s.id]) {
         const resta = U.r2(s.meta - (st ? st.pagado : 0));
         if (resta > 0.004) out.push({ tipo: 'deuda', r: { id: s.id, nombre: s.nombre, monto: resta, avisar: 5, sobre: s.id, espacio: e.id }, fecha: s.hasta, dias: U.daysBetween(hoy, s.hasta) });
       }
@@ -575,10 +575,44 @@
     S.cuentas.forEach((ct) => {
       if (!App.esCredito(ct)) return;
       const p = App.pagoTarjeta(ct, c);
-      if (!p || p.monto < 0.005) return;
-      out.push({ tipo: 'tarjeta', r: { id: ct.id, nombre: 'Tarjeta ' + ct.nombre, monto: p.monto, avisar: ct.avisar === undefined || ct.avisar === '' ? 3 : ct.avisar, cuenta: ct.id, estimado: p.estimado }, fecha: p.fecha, dias: U.daysBetween(hoy, p.fecha) });
+      const av = ct.avisar === undefined || ct.avisar === '' ? 3 : ct.avisar;
+      const v = App.pagoTarjetaVencido(ct, c);
+      if (v) out.push({ tipo: 'tarjeta', r: { id: ct.id, nombre: 'Tarjeta ' + ct.nombre, monto: v.monto, avisar: av, cuenta: ct.id, estimado: false }, fecha: v.fecha, dias: U.daysBetween(hoy, v.fecha) });
+      // lo vencido ya va aparte: al pago de la próxima fecha solo se le suma lo nuevo
+      const monto = p ? U.r2(p.monto - (v ? v.monto : 0)) : 0;
+      if (!p || monto < 0.005) return;
+      out.push({ tipo: 'tarjeta', r: { id: ct.id, nombre: 'Tarjeta ' + ct.nombre, monto, avisar: av, cuenta: ct.id, estimado: p.estimado }, fecha: p.fecha, dias: U.daysBetween(hoy, p.fecha) });
     });
     return out.sort((a, b) => a.dias - b.dias);
+  };
+
+  /* Pago de tarjeta que ya venció (último día de pago, hasta 31 días atrás) y no se ha cubierto: lo que debías al corte menos lo que has pagado después */
+  App.pagoTarjetaVencido = (ct, c) => {
+    const hoy = U.today();
+    const dc = parseInt(ct.diaCorte, 10) || 0;
+    const dp = parseInt(ct.diaPago, 10) || 0;
+    if (!dc || !dp) return null;
+    const d = U.parse(hoy);
+    const dia = (mo, n) => U.ymd(new Date(d.getFullYear(), mo, Math.min(n, new Date(d.getFullYear(), mo + 1, 0).getDate()), 12));
+    let fecha = dia(d.getMonth(), dp);
+    if (fecha >= hoy) fecha = dia(d.getMonth() - 1, dp);
+    if (U.daysBetween(fecha, hoy) > 31) return null;
+    const fp = U.parse(fecha);
+    const mesCorte = dp > dc ? fp.getMonth() : fp.getMonth() - 1;
+    const ultimo = new Date(fp.getFullYear(), mesCorte + 1, 0).getDate();
+    const corte = U.ymd(new Date(fp.getFullYear(), mesCorte, Math.min(dc, ultimo), 12));
+    if (corte >= hoy) return null;
+    let pagos = 0, msiDespues = 0;
+    App.state.movs.forEach((m) => {
+      if (m.fecha > corte && m.fecha <= hoy && ((m.tipo === 'traspaso' && m.cuenta2 === ct.id) || (m.tipo === 'ingreso' && m.cuenta === ct.id))) pagos += Number(m.monto);
+      if (m.tipo === 'gasto' && m.cuenta === ct.id && m.diferido && (parseInt(m.meses, 10) || 1) > 1 && m.fecha <= corte) {
+        App.cuotasTarjeta(ct.id, m.fecha, Number(m.monto), m.meses).forEach((x) => { if (x.f > fecha) msiDespues += x.a; });
+      }
+    });
+    const debe = Math.max(0, -((c || App.calc()).cuentas[ct.id] || 0));
+    const alCorte = Math.max(0, -(App.calc(corte).cuentas[ct.id] || 0));
+    const monto = U.r2(Math.min(debe, alCorte - msiDespues - pagos));
+    return monto > 0.004 ? { fecha, corte, monto } : null;
   };
 
   /* Cuánto pagar de la tarjeta en su próxima fecha de pago (lo del último corte, sin meses que aún no tocan) */

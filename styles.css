@@ -524,3 +524,11 @@ html.rojo { filter: grayscale(.6) saturate(.8); }
 @keyframes temblor { 10%, 90% { transform: translateX(-2px); } 20%, 80% { transform: translateX(4px); } 30%, 50%, 70% { transform: translateX(-7px); } 40%, 60% { transform: translateX(7px); } }
 html.rojo #app, html.rojo .hoja .cuerpo { animation: temblor .6s both; }
 @media (prefers-reduced-motion: reduce) { html.rojo #app, html.rojo .hoja .cuerpo { animation: none; } }
+
+/* historial de semanas y meses */
+.hist { margin-top: 18px; }
+.hist .rangos button { padding: 4px 12px; }
+.hist-fila .txt { position: relative; }
+.hist-fila.vacia { opacity: .55; }
+.hist-barra { display: block; height: 4px; border-radius: 2px; margin-top: 6px; }
+.hist-barra.ok { background: var(--green); opacity: .55; } .hist-barra.mal { background: var(--red); opacity: .55; }

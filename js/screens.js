@@ -119,14 +119,15 @@
       if (p.dias > (isNaN(av) ? 3 : av)) return;
       const st = p.r.sobre ? c.sob[p.r.sobre] : null;
       const tiene = st ? st.saldo : null;
-      const cuando = p.dias === 0 ? 'hoy' : p.dias === 1 ? 'mañana' : 'en ' + p.dias + ' días';
+      const venc = p.dias < 0;
+      const cuando = p.dias === 0 ? 'hoy' : p.dias === 1 ? 'mañana' : venc ? (p.dias === -1 ? 'ayer' : 'hace ' + (-p.dias) + ' días') : 'en ' + p.dias + ' días';
       let estado = '';
       if (p.tipo === 'tarjeta') estado = p.r.estimado ? 'Aproximado, el corte aún no llega.' : 'Para no pagar intereses.';
       else if (tiene !== null) estado = tiene >= p.r.monto - 0.004 ? '<span class="ok">Ya lo tienes apartado.</span>' : '<span class="cuidado">Llevas ' + U.money(Math.max(0, tiene)) + ' apartado.</span>';
       const boton = p.tipo === 'rec' ? '<button class="btn-chico blanco" data-a="pagar-rec" data-id="' + p.r.id + '" data-f="' + p.fecha + '">Registrar pago</button>'
         : p.tipo === 'tarjeta' ? '<button class="btn-chico blanco" data-a="pagar-tarjeta" data-id="' + p.r.cuenta + '">Pagar tarjeta</button>'
           : '<button class="btn-chico blanco" data-a="pagar-sobre" data-esp="' + p.r.espacio + '" data-id="' + p.r.id + '" data-f="' + (p.tipo === 'sobre' ? p.fecha : '') + '" data-monto="' + p.r.monto + '">Registrar pago</button>';
-      prio.push('<div class="aviso"><div class="ico">' + (p.tipo === 'tarjeta' ? '💳' : I.cal) + '</div><div class="txt"><b>' + U.esc(p.r.nombre) + ' · ' + U.money(p.r.monto) + '</b><p>Se paga ' + cuando + ' (' + U.fechaCorta(p.fecha) + '). ' + estado + '</p>' +
+      prio.push('<div class="aviso"><div class="ico">' + (p.tipo === 'tarjeta' ? '💳' : I.cal) + '</div><div class="txt"><b>' + U.esc(p.r.nombre) + ' · ' + U.money(p.r.monto) + '</b><p>' + (venc ? '<span class="pasado">Venció ' + cuando + '</span> (' + U.fechaCorta(p.fecha) + '). Págalo cuando puedas. ' : 'Se paga ' + cuando + ' (' + U.fechaCorta(p.fecha) + '). ') + estado + '</p>' +
         '<div class="acciones">' + boton + '</div></div></div>');
     });
     // dinero libre sin repartir
@@ -160,6 +161,60 @@
     return out;
   };
 
+  /* ---------------- HISTORIAL: buenas y malas semanas / meses ---------------- */
+  // se calcula en el momento con todos tus movimientos (no guarda nada aparte); cuenta igual que el resto de la app: ingresos y gastos de los espacios que cuentan como disponible
+  App.historial = (vista) => {
+    const S = App.state; const hoy = U.today();
+    const ok = {}; S.espacios.forEach((e) => { ok[e.id] = e.enDisponible; });
+    const clave = vista === 'mes' ? (f) => f.slice(0, 7) : (f) => U.weekStart(f);
+    const g = {}; let primera = '';
+    S.movs.forEach((m) => {
+      if (!ok[m.espacio] || (m.tipo !== 'ingreso' && m.tipo !== 'gasto') || m.fecha > hoy) return;
+      const k = clave(m.fecha); const x = g[k] || (g[k] = { k, ing: 0, gas: 0 });
+      if (m.tipo === 'ingreso') x.ing += Number(m.monto); else x.gas += Number(m.monto);
+      if (!primera || m.fecha < primera) primera = m.fecha;
+    });
+    if (!primera) return [];
+    const out = [];
+    for (let k = clave(hoy); k >= clave(primera);) {
+      const x = g[k] || { k, ing: 0, gas: 0 };
+      out.push({ k, ing: U.r2(x.ing), gas: U.r2(x.gas), neto: U.r2(x.ing - x.gas), actual: k === clave(hoy) });
+      k = vista === 'mes' ? (() => { const d = U.parse(k + '-01'); d.setMonth(d.getMonth() - 1); return U.ymd(d).slice(0, 7); })() : U.addDays(k, -7);
+    }
+    return out;
+  };
+  App.historialHtml = () => {
+    const ui = App.ui; const vista = ui.histVista || 'semana';
+    const todas = App.historial(vista);
+    if (!todas.length) return '';
+    const n = ui.histN || 6; const filas = todas.slice(0, n);
+    const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const MESL = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const etq = (x) => {
+      if (vista === 'mes') { const [y, m] = x.k.split('-'); return MESL[Number(m) - 1] + (y !== U.today().slice(0, 4) ? ' ' + y : ''); }
+      const fin = U.addDays(x.k, 6); const a = U.parse(x.k), b = U.parse(fin);
+      return a.getDate() + (a.getMonth() !== b.getMonth() ? ' ' + MES[a.getMonth()] : '') + ' – ' + b.getDate() + ' ' + MES[b.getMonth()];
+    };
+    const cerradas = todas.filter((x) => !x.actual && (x.ing || x.gas));
+    const mejor = cerradas.slice().sort((a, b) => b.neto - a.neto)[0]; const peor = cerradas.slice().sort((a, b) => a.neto - b.neto)[0];
+    const buenas = cerradas.filter((x) => x.neto >= 0).length;
+    const maxAbs = Math.max(1, ...filas.map((x) => Math.abs(x.neto)));
+    let h = '<div class="seccion hist"><div class="seccion-titulo"><h2>' + (vista === 'mes' ? 'Buenos y malos meses' : 'Buenas y malas semanas') + '</h2>' +
+      '<span class="rangos" style="margin:0"><button class="' + (vista === 'semana' ? 'on' : '') + '" data-a="hist-vista" data-v="semana">Semanas</button><button class="' + (vista === 'mes' ? 'on' : '') + '" data-a="hist-vista" data-v="mes">Meses</button></span></div>';
+    if (cerradas.length) h += '<p class="nota" style="margin:0 0 6px">' + buenas + ' de ' + cerradas.length + ' ' + (vista === 'mes' ? 'meses' : 'semanas') + ' cerraron en verde (ingresaste más de lo que gastaste).' +
+      (mejor && peor && mejor.k !== peor.k ? ' Mejor: <b>' + etq(mejor) + '</b>. Más floja: <b>' + etq(peor) + '</b>.' : '') + '</p>';
+    filas.forEach((x) => {
+      const vacia = !x.ing && !x.gas; const buena = x.neto >= 0;
+      h += '<div class="fila hist-fila' + (vacia ? ' vacia' : '') + '"><div class="ico">' + (vacia ? '·' : buena ? '🟢' : '🔴') + '</div><div class="txt"><b>' + etq(x) + (x.actual ? ' <small>(en curso)</small>' : '') + '</b>' +
+        '<small>' + (vacia ? 'Sin movimientos' : 'Ingresos ' + U.money0(x.ing) + ' · Gastos ' + U.money0(x.gas)) + '</small>' +
+        (vacia ? '' : '<i class="hist-barra ' + (buena ? 'ok' : 'mal') + '" style="width:' + Math.max(4, Math.round(Math.abs(x.neto) / maxAbs * 100)) + '%"></i>') + '</div>' +
+        '<div class="der"><b class="num ' + (vacia ? '' : buena ? 'ok' : 'pasado') + '">' + (vacia ? '' : (buena ? '+' : '−') + U.money0(Math.abs(x.neto))) + '</b></div></div>';
+    });
+    if (todas.length > n) h += '<button class="btn sec" data-a="hist-mas">Ver más ' + (vista === 'mes' ? 'meses' : 'semanas') + '</button>';
+    else if (n > 6) h += '<button class="btn sec" data-a="hist-menos">Ver menos</button>';
+    return h + '</div>';
+  };
+
   /* ---------------- MOVIMIENTOS ---------------- */
   App.pantallaMovs = () => {
     const S = App.state;
@@ -183,6 +238,7 @@
       (S.espacios.length > 1 ? S.espacios.map((e) => '<button class="chip ' + (ui.filtroEsp === e.id ? 'on' : '') + '" data-a="filtro-esp" data-v="' + e.id + '">' + U.esc(e.icono) + ' ' + U.esc(e.nombre) + '</button>').join('') : '') +
       '<button class="chip ' + (ui.verRepartos ? 'on' : '') + '" data-a="ver-repartos">Repartos</button></div>';
 
+    if (!q && ui.filtro === 'todo' && !ui.filtroEsp) h += App.historialHtml();
     if (!visibles.length) h += '<div class="vacio-txt">' + (total ? 'No hay movimientos en los últimos ' + ui.limiteDias + ' días.' : 'Aquí aparecerán tus gastos e ingresos.<br>Toca <b>+</b> para registrar el primero.') + '</div>';
     let diaActual = '';
     let bloque = '';
@@ -253,7 +309,7 @@
     const prox = App.proximosPagos(c);
     if (!prox.length) h += '<div class="nota">Ponle fecha de pago a tus sobres (renta, colegiatura, gym…) o agrega una tarjeta de crédito, y la app te avisará antes de cada pago.</div>';
     prox.forEach((p) => {
-      const cuando = p.dias === 0 ? 'Hoy' : p.dias === 1 ? 'Mañana' : U.fechaCorta(p.fecha);
+      const cuando = p.dias === 0 ? 'Hoy' : p.dias === 1 ? 'Mañana' : p.dias < 0 ? '<span class="pasado">Vencido · ' + U.fechaCorta(p.fecha) + '</span>' : U.fechaCorta(p.fecha);
       const frec = p.tipo === 'rec' ? ({ mensual: 'Cada mes', quincenal: 'Cada quincena', semanal: 'Cada semana' }[p.r.frecuencia] || '') : p.tipo === 'sobre' ? U.FREC_TXT[U.frec(p.r.frec)] : p.tipo === 'deuda' ? 'Pago único' : 'Tarjeta' + (p.r.estimado ? ' · aprox.' : '');
       const attrs = p.tipo === 'rec' ? 'data-h="recurrente" data-id="' + p.r.id + '"' : p.tipo === 'tarjeta' ? 'data-h="cuenta" data-id="' + p.r.cuenta + '"' : 'data-h="sobre" data-esp="' + p.r.espacio + '" data-id="' + p.r.id + '"';
       h += '<button class="fila" data-a="hoja" ' + attrs + '><div class="ico">' + (p.tipo === 'tarjeta' ? '💳' : I.cal.replace('<svg', '<svg style="width:19px;height:19px"')) + '</div>' +
@@ -294,7 +350,7 @@
       fila('hoja', I.phone, 'Instalar en tu teléfono', 'iPhone y Android', 'data-h="instalar"') +
       fila('hoja', I.apple, 'Atajos del iPhone', 'Gasto rápido y Apple Pay', 'data-h="atajo"') + '</div>';
     h += '<div class="seccion"><button class="btn peligro" data-a="hoja" data-h="borrar">Borrar todos mis datos</button>' +
-      '<p class="nota" style="text-align:center">Control de Finanzas · v1.6 · Tus datos viven en este teléfono.</p></div>';
+      '<p class="nota" style="text-align:center">Control de Finanzas · v1.7 · Tus datos viven en este teléfono.</p></div>';
     h += '</div>';
     return h;
   };

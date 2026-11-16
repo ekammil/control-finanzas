@@ -99,6 +99,9 @@
     'filtro-esp': (el) => { App.ui.filtroEsp = App.ui.filtroEsp === el.dataset.v ? '' : el.dataset.v; refrescar(); },
     'ver-repartos': () => { App.ui.verRepartos = !App.ui.verRepartos; refrescar(); },
     'mas-movs': () => { App.ui.limiteDias += 60; refrescar(); },
+    'hist-vista': (el) => { App.ui.histVista = el.dataset.v; App.ui.histN = 6; refrescar(); },
+    'hist-mas': () => { App.ui.histN = (App.ui.histN || 6) + 8; refrescar(); },
+    'hist-menos': () => { App.ui.histN = 6; refrescar(); },
     'editar-mov': (el) => {
       const m = App.state.movs.find((x) => x.id === el.dataset.id); if (!m) return;
       const apilar = !!App.h;
@@ -415,7 +418,7 @@
       const monto = num(h.monto); if (!(monto > 0)) return App.toast('Escribe el monto', 'error');
       const dia = U.clamp(parseInt(h.dia, 10) || 1, 1, 31);
       const datos = { nombre: h.nombre.trim(), monto, frecuencia: h.frecuencia, dia, diaSemana: Number(h.diaSemana) || 0, avisar: Number(h.avisar), espacio: h.espacio, sobre: h.sobre, cuenta: h.cuenta };
-      if (h.id) Object.assign(S.recurrentes.find((r) => r.id === h.id), datos); else S.recurrentes.push(Object.assign({ id: U.uid(), pagado: '' }, datos));
+      if (h.id) Object.assign(S.recurrentes.find((r) => r.id === h.id), datos); else S.recurrentes.push(Object.assign({ id: U.uid(), pagado: '', creado: U.today() }, datos));
       App.save(); App.toast('Pago programado guardado', 'ok'); App.cerrarHoja(true); refrescar();
     },
     'rec-borrar': (el) => {
@@ -872,9 +875,9 @@
     if (!App.notifPermitidas() || a.onboarding || !S.cuentas.length) return;
     const c = App.calc(); const hoy = U.today();
     if (a.notifPagos !== false) App.proximosPagos(c).forEach((p) => {
-      if (p.dias < 0 || p.dias > 2) return;
-      const cuando = p.dias === 0 ? 'hoy' : p.dias === 1 ? 'mañana' : 'en 2 días';
-      notificar('pago-' + p.r.id + '-' + p.fecha + '-' + p.dias, (p.tipo === 'tarjeta' ? '💳 ' : '📅 ') + p.r.nombre + ': pago ' + cuando, 'Te toca pagar ' + U.money(p.r.monto) + (p.dias ? ' el ' + U.fechaCorta(p.fecha) : '') + '. Toca para ver si ya lo tienes juntado.');
+      if (p.dias > 2) return;
+      const cuando = p.dias < 0 ? 'vencido' : p.dias === 0 ? 'hoy' : p.dias === 1 ? 'mañana' : 'en 2 días';
+      notificar('pago-' + p.r.id + '-' + p.fecha + '-' + p.dias, (p.tipo === 'tarjeta' ? '💳 ' : '📅 ') + p.r.nombre + ': pago ' + cuando, (p.dias < 0 ? 'Venció el ' + U.fechaCorta(p.fecha) + ' y sigue pendiente: ' : 'Te toca pagar ') + U.money(p.r.monto) + (p.dias > 0 ? ' el ' + U.fechaCorta(p.fecha) : '') + '. Toca para verlo.');
     });
     if (a.notifPasado !== false) App.alertas(c).forEach((al) => {
       if (al.tipo !== 'sobre' || al.nivel !== 'pasado') return;
