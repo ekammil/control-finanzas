@@ -925,7 +925,17 @@
     App.splash();
     App.persistir();
     App.sync.auto();
-    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      // actualización automática: busca versión nueva al abrir, al volver a la app y cada 30 min; si hay, se recarga sola (sin interrumpir una hoja abierta)
+      const hubo = !!navigator.serviceWorker.controller; let recargando = false;
+      const recargar = () => { if (recargando) return; if (App.h) return setTimeout(recargar, 15000); recargando = true; location.reload(); };
+      if (hubo) navigator.serviceWorker.addEventListener('controllerchange', recargar);
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        const buscar = () => { try { reg.update().catch(() => {}); } catch (e) { /* sin soporte */ } };
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) buscar(); });
+        setInterval(buscar, 30 * 60 * 1000); buscar();
+      }).catch(() => {});
+    }
   };
 
   App.iniciar();
