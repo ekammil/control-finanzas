@@ -97,14 +97,28 @@
         '<div class="acciones"><button class="btn-chico blanco" data-a="bandeja" data-id="' + b.id + '">Elegir sobre</button><button class="btn-chico" data-a="bandeja-descartar" data-id="' + b.id + '">Descartar</button></div></div></div>');
     });
     // alertas: sobres o tarjetas en las que te pasaste o te queda poco
-    App.alertas(c).slice(0, 4).forEach((al) => {
+    // "Entendido": se quita ese aviso en ese nivel; vuelve si gastas más (o pasa a "en ceros" / "te pasaste") y en el siguiente ciclo
+    const okA = S.ajustes.alertasOk || (S.ajustes.alertasOk = {});
+    const todas = App.alertas(c); const activas = {};
+    const alertasVis = todas.filter((al) => {
+      const key = al.tipo === 'sobre' ? 's-' + al.s.id : 't-' + al.ct.id;
+      al.key = key; al.rest = al.tipo === 'sobre' ? al.restante : al.disp; al.ciclo = al.tipo === 'sobre' ? (c.sob[al.s.id].cIni || '') : '';
+      activas[key] = 1;
+      const ok = okA[key];
+      if (!ok) return true;
+      if (ok.n === al.nivel && ok.c === al.ciclo && al.rest >= ok.r - 0.004 && al.rest <= ok.r + 0.004) return false;
+      delete okA[key]; return true;
+    });
+    Object.keys(okA).forEach((k) => { if (!activas[k]) delete okA[k]; });
+    alertasVis.slice(0, 4).forEach((al) => {
       const ver = al.tipo === 'sobre' ? 'data-h="sobre" data-esp="' + al.e.id + '" data-id="' + al.s.id + '"' : 'data-h="cuenta" data-id="' + al.ct.id + '"';
       if (al.tipo === 'sobre' && al.nivel === 'pasado' && !(App.porCubrir(al.s, c.sob[al.s.id]) > 0.004)) return; // ya lo cubriste
       const titulo = al.tipo === 'sobre' ? U.esc(al.s.icono + ' ' + al.s.nombre) : '💳 ' + U.esc(al.ct.nombre);
-      const det = al.tipo === 'sobre' ? al.corto : al.nivel === 'pasado' ? 'Te pasaste ' + U.money(-al.disp) + ' ' + (al.propio ? 'de tu límite de uso (' + U.money0(al.L) + ')' : 'del límite (' + U.money0(al.L) + ')') : 'Te queda' + (al.disp === 1 ? '' : 'n') + ' ' + U.money(al.disp) + ' de ' + U.money0(al.L) + (al.propio ? ' (tu límite de uso)' : ' de crédito') + ' · ' + Math.round(al.pct) + '%';
-      prio.push('<div class="aviso al-' + al.nivel + '"><div class="ico">' + (al.nivel === 'pasado' ? '🚨' : '⚠️') + '</div><div class="txt"><b>' + titulo + (al.nivel === 'pasado' ? ' · te pasaste' : ' · queda poco') + '</b><p>' + det + '</p>' +
+      const det = al.tipo === 'sobre' ? al.corto : al.nivel === 'pasado' ? 'Te pasaste ' + U.money(-al.disp) + ' ' + (al.propio ? 'de tu límite de uso (' + U.money0(al.L) + ')' : 'del límite (' + U.money0(al.L) + ')') : al.nivel === 'cero' ? 'Llegaste al límite (' + U.money0(al.L) + '). No te queda nada.' : 'Te queda' + (al.disp === 1 ? '' : 'n') + ' ' + U.money(al.disp) + ' de ' + U.money0(al.L) + (al.propio ? ' (tu límite de uso)' : ' de crédito') + ' · ' + Math.round(al.pct) + '%';
+      prio.push('<div class="aviso al-' + al.nivel + '"><div class="ico">' + (al.nivel === 'pasado' ? '🚨' : '⚠️') + '</div><div class="txt"><b>' + titulo + (al.nivel === 'pasado' ? ' · te pasaste' : al.nivel === 'cero' ? ' · en ceros' : ' · queda poco') + '</b><p>' + det + '</p>' +
         '<i class="ir-barra"><i style="transform:scaleX(' + Math.max(0, Math.min(1, al.pct / 100)).toFixed(3) + ')" class="bajo"></i></i>' +
-        '<div class="acciones">' + (al.tipo === 'sobre' && App.porCubrir(al.s, c.sob[al.s.id]) > 0.004 ? '<button class="btn-chico blanco" data-a="hoja" data-h="cubrir" data-esp="' + al.e.id + '" data-id="' + al.s.id + '">Cubrir con…</button><button class="btn-chico" data-a="hoja" ' + ver + '>Ver</button>' : '<button class="btn-chico blanco" data-a="hoja" ' + ver + '>Ver</button><button class="btn-chico" data-a="hoja" data-h="alertas">Ajustar alertas</button>') + '</div></div></div>');
+        '<div class="acciones">' + (al.tipo === 'sobre' && App.porCubrir(al.s, c.sob[al.s.id]) > 0.004 ? '<button class="btn-chico blanco" data-a="hoja" data-h="cubrir" data-esp="' + al.e.id + '" data-id="' + al.s.id + '">Cubrir con…</button><button class="btn-chico" data-a="hoja" ' + ver + '>Ver</button>' : '<button class="btn-chico blanco" data-a="hoja" ' + ver + '>Ver</button><button class="btn-chico" data-a="hoja" data-h="alertas">Ajustar alertas</button>') +
+        '<button class="btn-chico" data-a="alerta-ok" data-k="' + al.key + '" data-n="' + al.nivel + '" data-r="' + al.rest + '" data-c="' + U.esc(al.ciclo) + '">Entendido</button></div></div></div>');
     });
     // resumen semanal (lunes o primer día que abras la semana)
     const ini = U.weekStart(hoy);
@@ -117,6 +131,8 @@
     App.proximosPagos(c).forEach((p) => {
       const av = Number(p.r.avisar);
       if (p.dias > (isNaN(av) ? 3 : av)) return;
+      const kp = 'pago-' + p.tipo + '-' + p.r.id + '-' + p.fecha; // "Avísame mañana": se esconde hoy y vuelve mañana
+      if (quitados[kp] === hoy) return;
       const st = p.r.sobre ? c.sob[p.r.sobre] : null;
       const tiene = st ? st.saldo : null;
       const venc = p.dias < 0;
@@ -128,7 +144,7 @@
         : p.tipo === 'tarjeta' ? '<button class="btn-chico blanco" data-a="pagar-tarjeta" data-id="' + p.r.cuenta + '">Pagar tarjeta</button>'
           : '<button class="btn-chico blanco" data-a="pagar-sobre" data-esp="' + p.r.espacio + '" data-id="' + p.r.id + '" data-f="' + (p.tipo === 'sobre' ? p.fecha : '') + '" data-monto="' + p.r.monto + '">Registrar pago</button>';
       prio.push('<div class="aviso"><div class="ico">' + (p.tipo === 'tarjeta' ? '💳' : I.cal) + '</div><div class="txt"><b>' + U.esc(p.r.nombre) + ' · ' + U.money(p.r.monto) + '</b><p>' + (venc ? '<span class="pasado">Venció ' + cuando + '</span> (' + U.fechaCorta(p.fecha) + '). Págalo cuando puedas. ' : 'Se paga ' + cuando + ' (' + U.fechaCorta(p.fecha) + '). ') + estado + '</p>' +
-        '<div class="acciones">' + boton + '</div></div></div>');
+        '<div class="acciones">' + boton + '<button class="btn-chico" data-a="aviso-quitar" data-k="' + kp + '">Avísame mañana</button></div></div></div>');
     });
     // dinero libre sin repartir
     S.espacios.forEach((e) => {
@@ -159,6 +175,74 @@
       out.unshift('<div class="prio' + (oculto ? ' oculto' : '') + '"><button class="prio-tab" data-a="prio-toggle"><b>⭐ Importantes</b><i class="prio-n">' + prio.length + '</i><span>' + (oculto ? 'Ver ›' : 'Esconder ⌃') + '</span></button>' + (oculto ? '' : prio.join('')) + '</div>');
     }
     return out;
+  };
+
+  /* ---------------- MOVIMIENTOS AUTOMÁTICOS: repartos del día y reposiciones de sobres ---------------- */
+  // se arma al momento con tus movimientos (no guarda nada aparte): una línea por reparto y por reposición, corta y específica
+  App.actividadAuto = () => {
+    const S = App.state; const hoy = U.today(); const desde = U.addDays(hoy, -60);
+    const info = {}; S.espacios.forEach((e) => e.sobres.forEach((s) => { info[s.id] = { s, e }; }));
+    const nom = (id) => (id && info[id] ? info[id].s.nombre : 'Libre');
+    const multi = S.espacios.length > 1;
+    const evs = [];
+    // 1) repartos automáticos: lo libre que se aparta en los sobres (uno por día y espacio)
+    const rep = {};
+    S.movs.forEach((m) => {
+      if (m.tipo !== 'mover' || m.origen !== 'auto' || m.bal || m.fecha < desde) return;
+      const k = m.fecha + '|' + m.espacio; const r = rep[k] || (rep[k] = { fecha: m.fecha, esp: m.espacio, creado: 0, tot: 0, por: {} });
+      r.creado = Math.max(r.creado, m.creado || 0); r.tot += Number(m.monto); r.por[m.sobre2] = (r.por[m.sobre2] || 0) + Number(m.monto);
+    });
+    Object.keys(rep).forEach((k) => {
+      const r = rep[k]; const e = App.espacio(r.esp);
+      evs.push({ fecha: r.fecha, creado: r.creado, ico: '🔀', titulo: 'Se repartió ' + App.fmtAuto(r.tot) + (multi && e ? ' en ' + e.nombre : ''), sub: Object.keys(r.por).map((id) => nom(id) + ' ' + App.fmtAuto(r.por[id])).join(' · ') });
+    });
+    // 2) sobres que te pasaste y de dónde se repuso: de otros sobres (auto-balanceo) o de lo Libre
+    const c = App.calc(); const rec = {};
+    const evR = (fecha, sid) => { const k = fecha + '|' + sid; return rec[k] || (rec[k] = { fecha, sid, creado: 0, over: 0, partes: [] }); };
+    S.movs.forEach((m) => {
+      if (m.tipo === 'mover' && m.bal && m.fecha >= desde && info[m.sobre2]) { const r = evR(m.fecha, m.sobre2); r.creado = Math.max(r.creado, m.creado || 0); r.partes.push({ de: nom(m.sobre), monto: Number(m.monto) }); }
+    });
+    try {
+      const orden = (a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : (a.creado || 0) - (b.creado || 0));
+      S.espacios.forEach((e) => e.sobres.forEach((s) => {
+        if (!(s.tipo === 'gasto' || s.tipo === 'limite') || !c.sob[s.id]) return;
+        const M = s.fechaPago ? c.sob[s.id].M : c.sob[s.id].Mc; if (!(M > 0)) return;
+        const gs = S.movs.filter((m) => m.tipo === 'gasto' && m.sobre === s.id && !m.diferido).sort(orden);
+        const acum = {};
+        gs.forEach((m) => {
+          const cy = App.cicloSobre(s, m.fecha).ini; const antes = acum[cy] || 0; const monto = Number(m.monto);
+          acum[cy] = antes + monto;
+          const pasa = Math.max(0, antes + monto - M) - Math.max(0, antes - M);
+          if (pasa > 0.004 && m.fecha >= desde) { const r = evR(m.fecha, s.id); r.over += pasa; r.creado = Math.max(r.creado, m.creado || 0); }
+        });
+      }));
+    } catch (err) { /* si algo no cuadra, solo se omiten las reposiciones desde Libre */ }
+    Object.keys(rec).forEach((k) => {
+      const r = rec[k]; const s = info[r.sid].s; const otros = r.partes.reduce((t, p) => t + p.monto, 0);
+      const libre = r.over > 0.004 ? U.r2(Math.max(0, r.over - otros)) : 0;
+      const partes = (libre > 0.004 ? [{ de: 'Libre', monto: libre }] : []).concat(r.partes);
+      if (!partes.length) return;
+      const por = {}; partes.forEach((p) => { por[p.de] = (por[p.de] || 0) + p.monto; });
+      const det = Object.keys(por).map((d) => 'de ' + d + ' ' + App.fmtAuto(por[d])).join(' · ');
+      evs.push(r.over > 0.004
+        ? { fecha: r.fecha, creado: r.creado, ico: '🔁', titulo: s.icono + ' ' + s.nombre + ' se pasó ' + App.fmtAuto(r.over), sub: 'Se repuso ' + det }
+        : { fecha: r.fecha, creado: r.creado, ico: '🔁', titulo: s.icono + ' ' + s.nombre + ' se completó con ' + App.fmtAuto(otros), sub: 'Salió ' + det });
+    });
+    return evs.sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : b.creado - a.creado));
+  };
+  App.fmtAuto = (v) => (Math.abs(v - Math.round(v)) < 0.005 ? U.money0(v) : U.money(v));
+  App.actividadHtml = () => {
+    const ui = App.ui; const evs = App.actividadAuto();
+    if (!evs.length) return '';
+    const n = ui.autoN || 3; const ver = evs.slice(0, n);
+    let h = '<div class="seccion auto"><div class="seccion-titulo"><h2>Movimientos automáticos</h2></div>';
+    ver.forEach((x) => {
+      h += '<div class="fila auto-fila"><div class="ico">' + x.ico + '</div><div class="txt"><b>' + U.esc(x.titulo) + '</b><small>' + U.esc(x.sub) + '</small></div>' +
+        '<div class="der"><small>' + (x.fecha === U.today() ? 'Hoy' : x.fecha === U.addDays(U.today(), -1) ? 'Ayer' : U.fechaCorta(x.fecha)) + (x.creado ? ' · ' + U.hora(x.creado) : '') + '</small></div></div>';
+    });
+    if (evs.length > n) h += '<button class="btn sec" data-a="auto-mas">Ver más (' + (evs.length - n) + ')</button>';
+    else if (n > 3) h += '<button class="btn sec" data-a="auto-menos">Ver menos</button>';
+    return h + '</div>';
   };
 
   /* ---------------- HISTORIAL: buenas y malas semanas / meses ---------------- */
@@ -238,6 +322,7 @@
       (S.espacios.length > 1 ? S.espacios.map((e) => '<button class="chip ' + (ui.filtroEsp === e.id ? 'on' : '') + '" data-a="filtro-esp" data-v="' + e.id + '">' + U.esc(e.icono) + ' ' + U.esc(e.nombre) + '</button>').join('') : '') +
       '<button class="chip ' + (ui.verRepartos ? 'on' : '') + '" data-a="ver-repartos">Repartos</button></div>';
 
+    if (!q && !ui.filtroEsp && (ui.filtro === 'todo' || ui.filtro === 'movidos')) h += App.actividadHtml();
     if (!q && ui.filtro === 'todo' && !ui.filtroEsp) h += App.historialHtml();
     if (!visibles.length) h += '<div class="vacio-txt">' + (total ? 'No hay movimientos en los últimos ' + ui.limiteDias + ' días.' : 'Aquí aparecerán tus gastos e ingresos.<br>Toca <b>+</b> para registrar el primero.') + '</div>';
     let diaActual = '';
@@ -350,7 +435,7 @@
       fila('hoja', I.phone, 'Instalar en tu teléfono', 'iPhone y Android', 'data-h="instalar"') +
       fila('hoja', I.apple, 'Atajos del iPhone', 'Gasto rápido y Apple Pay', 'data-h="atajo"') + '</div>';
     h += '<div class="seccion"><button class="btn peligro" data-a="hoja" data-h="borrar">Borrar todos mis datos</button>' +
-      '<p class="nota" style="text-align:center">Control de Finanzas · v1.7 · Tus datos viven en este teléfono.</p></div>';
+      '<p class="nota" style="text-align:center">Control de Finanzas · v1.8 · Tus datos viven en este teléfono.</p></div>';
     h += '</div>';
     return h;
   };

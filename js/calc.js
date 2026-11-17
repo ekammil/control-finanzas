@@ -765,6 +765,8 @@
     const pct = restante / M * 100;
     const cuando = U.FREC_ESTE[U.frec(s.frecPago)];
     if (restante < -0.004) return { nivel: 'pasado', restante, pct, texto: s.nombre + ': te pasaste ' + U.money(-restante) + ' ' + cuando, corto: 'Te pasaste ' + U.money(-restante) + ' de ' + U.money(M) + ' ' + cuando };
+    // se acabó justo lo planeado: "en ceros" (los pagos con fecha no, porque al pagarlos se usa el 100%)
+    if (!s.fechaPago && restante <= 0.004) return { nivel: 'cero', restante, pct: 0, texto: s.nombre + ': ya no te queda nada ' + cuando + ' (en ceros)', corto: 'Ya llegaste a $0 de ' + U.money(M) + ' ' + cuando };
     // los pagos con fecha (renta, gym) solo avisan si te pasas: al pagarlos se usa el 100%
     if (s.fechaPago || !(u > 0) || pct > u + 1e-9) return null;
     return { nivel: 'poco', restante, pct, texto: s.nombre + ': te queda' + (restante === 1 ? '' : 'n') + ' ' + U.money(restante) + ' (' + Math.round(pct) + '%) ' + cuando, corto: 'Te queda ' + U.money(restante) + ' de ' + U.money(M) + ' ' + cuando + ' (' + Math.round(pct) + '%)' };
@@ -789,6 +791,7 @@
     if (u === null || !(x.L > 0)) return null;
     const de = x.propio ? 'de tu límite de uso' : 'de crédito';
     if (x.disp < -0.004) return Object.assign(x, { nivel: 'pasado', texto: ct.nombre + ': te pasaste ' + U.money(-x.disp) + ' ' + (x.propio ? 'de tu límite de uso' : 'del límite') });
+    if (x.disp <= 0.004) return Object.assign(x, { nivel: 'cero', texto: ct.nombre + ': llegaste al límite (en ceros)' });
     if (!(u > 0) || x.pct > u + 1e-9) return null;
     return Object.assign(x, { nivel: 'poco', texto: ct.nombre + ': te queda' + (x.disp === 1 ? '' : 'n') + ' ' + U.money(x.disp) + ' ' + de + ' (' + Math.round(x.pct) + '%)' });
   };

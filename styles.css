@@ -364,7 +364,7 @@ code.url { display: block; word-break: break-all; background: var(--fill); paddi
 .aviso .ir-barra { max-width: 240px; }
 .aviso.al-pasado .ir-barra > i { background: var(--red); }
 .aviso.al-pasado .ico { background: rgba(255,107,107,.16); }
-.aviso.al-poco .ico { background: rgba(255,200,87,.15); }
+.aviso.al-poco .ico, .aviso.al-cero .ico { background: rgba(255,200,87,.15); }
 .lista-al { display: flex; flex-direction: column; }
 .fila-al { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .fila-al .txt { flex: 1; min-width: 0; }
@@ -532,3 +532,9 @@ html.rojo #app, html.rojo .hoja .cuerpo { animation: temblor .6s both; }
 .hist-fila.vacia { opacity: .55; }
 .hist-barra { display: block; height: 4px; border-radius: 2px; margin-top: 6px; }
 .hist-barra.ok { background: var(--green); opacity: .55; } .hist-barra.mal { background: var(--red); opacity: .55; }
+
+/* movimientos automáticos */
+.auto { margin-top: 14px; }
+.auto-fila { align-items: flex-start; }
+.auto-fila .txt small { white-space: normal; line-height: 1.35; }
+.auto-fila .der small { white-space: nowrap; }

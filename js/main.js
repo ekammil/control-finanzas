@@ -151,7 +151,14 @@
     /* cuadre */
     'cuadre-guardar': () => App.guardarCuadre(),
     'prio-toggle': () => { App.state.ajustes.prioOculto = !App.state.ajustes.prioOculto; App.save(); U.haptic(); if (App.h) App.renderHoja(); App.render(); },
-    'aviso-quitar': (el) => { App.quitarAvisos([el.dataset.k]); },
+    'aviso-quitar': (el) => { App.quitarAvisos([el.dataset.k]); if ((el.dataset.k || '').indexOf('pago-') === 0) App.toast('Listo, te lo vuelvo a avisar mañana', 'ok'); },
+    'alerta-ok': (el) => {
+      const a = App.state.ajustes; a.alertasOk = Object.assign({}, a.alertasOk);
+      a.alertasOk[el.dataset.k] = { n: el.dataset.n, r: Number(el.dataset.r), c: el.dataset.c || '' };
+      App.save(); U.haptic(); if (App.h) App.renderHoja(); App.render();
+    },
+    'auto-mas': () => { App.ui.autoN = (App.ui.autoN || 3) + 6; refrescar(); },
+    'auto-menos': () => { App.ui.autoN = 3; refrescar(); },
     'avisos-limpiar': () => { App.quitarAvisos((App.quitables || []).slice()); App.toast('Listo, quité los avisos que se podían quitar', 'ok'); },
     'cubrir-de': (el) => { App.h.de = el.dataset.v || ''; App.renderHoja(); },
     'cubrir-ok': () => {
