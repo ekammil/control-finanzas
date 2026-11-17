@@ -157,8 +157,9 @@
       a.alertasOk[el.dataset.k] = { n: el.dataset.n, r: Number(el.dataset.r), c: el.dataset.c || '' };
       App.save(); U.haptic(); if (App.h) App.renderHoja(); App.render();
     },
-    'auto-mas': () => { App.ui.autoN = (App.ui.autoN || 3) + 6; refrescar(); },
-    'auto-menos': () => { App.ui.autoN = 3; refrescar(); },
+    'auto-abrir': () => { App.ui.autoAbierto = true; App.ui.autoN = 6; refrescar(); },
+    'auto-mas': () => { App.ui.autoN = (App.ui.autoN || 6) + 6; refrescar(); },
+    'auto-cerrar': () => { App.ui.autoAbierto = false; App.ui.autoN = 6; refrescar(); },
     'avisos-limpiar': () => { App.quitarAvisos((App.quitables || []).slice()); App.toast('Listo, quité los avisos que se podían quitar', 'ok'); },
     'cubrir-de': (el) => { App.h.de = el.dataset.v || ''; App.renderHoja(); },
     'cubrir-ok': () => {

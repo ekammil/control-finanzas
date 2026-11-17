@@ -234,14 +234,20 @@
   App.actividadHtml = () => {
     const ui = App.ui; const evs = App.actividadAuto();
     if (!evs.length) return '';
-    const n = ui.autoN || 3; const ver = evs.slice(0, n);
+    const fila = (x) => '<div class="fila auto-fila"><div class="ico">' + x.ico + '</div><div class="txt"><b>' + U.esc(x.titulo) + '</b><small>' + U.esc(x.sub) + '</small></div>' +
+      '<div class="der"><small>' + (x.fecha === U.today() ? 'Hoy' : x.fecha === U.addDays(U.today(), -1) ? 'Ayer' : U.fechaCorta(x.fecha)) + (x.creado ? ' · ' + U.hora(x.creado) : '') + '</small></div></div>';
     let h = '<div class="seccion auto"><div class="seccion-titulo"><h2>Movimientos automáticos</h2></div>';
-    ver.forEach((x) => {
-      h += '<div class="fila auto-fila"><div class="ico">' + x.ico + '</div><div class="txt"><b>' + U.esc(x.titulo) + '</b><small>' + U.esc(x.sub) + '</small></div>' +
-        '<div class="der"><small>' + (x.fecha === U.today() ? 'Hoy' : x.fecha === U.addDays(U.today(), -1) ? 'Ayer' : U.fechaCorta(x.fecha)) + (x.creado ? ' · ' + U.hora(x.creado) : '') + '</small></div></div>';
-    });
+    if (!ui.autoAbierto) {
+      // cerrada: solo el último movimiento automático de las últimas 12 horas (si hubo) y debajo "Ver más"
+      const rec = evs.find((x) => x.creado && Date.now() - x.creado <= 12 * 3600 * 1000);
+      if (rec) h += fila(rec) + '<button class="btn sec" data-a="auto-abrir">Ver más</button>';
+      else h += '<button class="btn sec" data-a="auto-abrir">Ver los últimos movimientos automáticos</button>';
+      return h + '</div>';
+    }
+    const n = ui.autoN || 6;
+    evs.slice(0, n).forEach((x) => { h += fila(x); });
     if (evs.length > n) h += '<button class="btn sec" data-a="auto-mas">Ver más (' + (evs.length - n) + ')</button>';
-    else if (n > 3) h += '<button class="btn sec" data-a="auto-menos">Ver menos</button>';
+    h += '<button class="btn sec" data-a="auto-cerrar">Cerrar</button>';
     return h + '</div>';
   };
 
