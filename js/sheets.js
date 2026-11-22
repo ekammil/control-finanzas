@@ -93,7 +93,7 @@
       }, d);
       if (d.editId) {
         const m = S.movs.find((x) => x.id === d.editId);
-        if (m) Object.assign(h, { modo: m.tipo, monto: String(m.monto), espacio: m.espacio, sobre: m.sobre, cuenta: m.cuenta, nota: m.nota, fecha: m.fecha, origen: m.origen, sub: m.sub || 'b', diferido: !!m.diferido, meses: m.meses || 1 });
+        if (m) Object.assign(h, { modo: m.tipo, monto: String(m.monto), espacio: m.espacio, sobre: m.sobre, cuenta: m.cuenta, nota: m.nota, fecha: m.fecha, pagoRec: !!m.pagoRec, origen: m.origen, sub: m.sub || 'b', diferido: !!m.diferido, meses: m.meses || 1 });
       }
       if (h.modo === 'mover' && !h.cuenta2) { const o = S.cuentas.find((c) => c.id !== h.cuenta); h.cuenta2 = o ? o.id : ''; }
       return h;
@@ -183,7 +183,7 @@
     const monto = h.editId ? 0 : App.montoNum(h);
     const out = [];
     const s = App.sobre(h.espacio, h.sobre); const st = s ? c.sob[s.id] : null;
-    if (s && st && (s.tipo === 'gasto' || s.tipo === 'limite') && st.M > 0 && !s.fechaPago && !h.diferido) {
+    if (s && st && (s.tipo === 'gasto' || s.tipo === 'limite') && st.M > 0 && !s.fechaPago && !h.diferido && !h.recId && !h.pagoRec) {
       const pc = App.presupuestoCiclo(s, st);
       const rest = U.r2(pc.M - st.gastadoCiclo); const desp = U.r2(rest - monto);
       const cuando = U.FREC_ESTE[U.frec(s.frecPago)] + (pc.parcial ? ' (cuenta desde el ' + U.fechaCorta(s.creado) + ')' : '');
@@ -197,6 +197,8 @@
       const pct = pc.M > 0 ? Math.max(0, Math.min(1, (monto > 0 ? desp : rest) / pc.M)) : 0;
       out.push('<div class="ir-fila"><span class="ir-ico">' + U.esc(s.icono) + '</span><div class="ir-txt">' + t + '<i class="ir-barra"><i style="transform:scaleX(' + pct.toFixed(3) + ')" class="' + (pct <= 0.2 ? 'bajo' : '') + '"></i></i></div></div>');
     }
+    // pago programado (renta, suscripción): sale de lo apartado en su sobre, no del presupuesto semanal
+    if (s && st && (h.recId || h.pagoRec) && !h.diferido) out.push('<div class="ir-fila"><span class="ir-ico">' + U.esc(s.icono) + '</span><div class="ir-txt">En ' + U.esc(s.nombre) + ' tienes <b class="num">' + U.money(Math.max(0, st.saldo)) + '</b> apartados' + (monto > 0 ? (st.saldo - monto >= -0.004 ? ' · quedarán <b class="num">' + U.money(st.saldo - monto) + '</b>' : ' · el resto (' + U.money(monto - Math.max(0, st.saldo)) + ') sale de tu dinero libre') : '') + '.</div></div>');
     const ct = App.cuenta(h.cuenta);
     if (App.esCredito(ct)) {
       const x = App.usoTarjeta(ct, c, monto);
@@ -293,7 +295,7 @@
       if (!h.espacio) return App.toast('Elige un espacio', 'error');
       const cta = App.cuenta(h.cuenta);
       const diferido = h.modo === 'gasto' && App.esCredito(cta) && !!h.diferido;
-      const datos = { tipo: h.modo, monto, espacio: h.espacio, sobre: h.modo === 'gasto' ? h.sobre : '', cuenta: h.cuenta, sub: cta && cta.partes ? (h.sub || 'b') : '', nota: (h.nota || '').trim(), fecha: h.fecha, diferido, meses: diferido ? Number(h.meses) || 1 : 0 };
+      const datos = { tipo: h.modo, monto, espacio: h.espacio, sobre: h.modo === 'gasto' ? h.sobre : '', cuenta: h.cuenta, sub: cta && cta.partes ? (h.sub || 'b') : '', nota: (h.nota || '').trim(), fecha: h.fecha, pagoRec: !!(h.recId || h.pagoRec), diferido, meses: diferido ? Number(h.meses) || 1 : 0 };
       if (diferido) App.sobreTarjeta(h.espacio, h.cuenta, true);
       if (h.editId) {
         App.updateMov(h.editId, datos);

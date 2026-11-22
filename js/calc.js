@@ -360,7 +360,7 @@
         if (!x || diferido) return;
         if (fase === 'semana') { x.gastadoSemana += v; x.excesoSemana += exceso; }
         const s = App.sobre(m.espacio, m.sobre);
-        const ev = { f: m.fecha, g: v, ex: exceso };
+        const ev = { f: m.fecha, g: m.pagoRec && s && !s.fechaPago ? 0 : v, ex: exceso }; // un pago programado (renta mensual) no cuenta contra el tope semanal del sobre
         if (s && s.tipo === 'deuda' && (!s.desde || m.fecha >= s.desde)) ev.pg = v;
         L[m.sobre].ev.push(ev);
       },
