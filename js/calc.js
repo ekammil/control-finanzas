@@ -586,6 +586,13 @@
     return out.sort((a, b) => a.dias - b.dias);
   };
 
+  /* Sobres con un pago vencido sin registrar: su dinero está apartado para ese pago y no se mueve solo (ni a otro sobre ni a Ahorro) */
+  App.sobresReservados = (c) => {
+    const r = {};
+    App.proximosPagos(c).forEach((p) => { if (p.dias < 0 && p.r.sobre) r[p.r.sobre] = true; });
+    return r;
+  };
+
   /* Pago de tarjeta que ya venció (último día de pago, hasta 31 días atrás) y no se ha cubierto: lo que debías al corte menos lo que has pagado después */
   App.pagoTarjetaVencido = (ct, c) => {
     const hoy = U.today();

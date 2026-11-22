@@ -210,7 +210,7 @@
     'pagar-rec': (el) => {
       const r = App.state.recurrentes.find((x) => x.id === el.dataset.id); if (!r) return;
       // un cobro fijo a tarjeta de crédito (como una suscripción) se junta poco a poco hasta pagar la tarjeta
-      App.abrirHoja('registro', { modo: 'gasto', monto: String(r.monto), espacio: r.espacio, sobre: r.sobre, cuenta: r.cuenta || App.ultimaCuenta('gasto'), nota: r.nombre, recId: r.id, recFecha: el.dataset.f, diferido: App.esCredito(App.cuenta(r.cuenta)), fecha: el.dataset.f && el.dataset.f <= U.today() ? el.dataset.f : U.today() });
+      App.abrirHoja('registro', { modo: 'gasto', monto: String(r.monto), espacio: r.espacio, sobre: r.sobre, cuenta: r.cuenta || App.ultimaCuenta('gasto'), nota: r.nombre, recId: r.id, recFecha: el.dataset.f, diferido: App.esCredito(App.cuenta(r.cuenta)), fecha: U.today() }); // siempre hoy: con la fecha vieja el sobre se veía con el dinero que tenía ese día, no con el de ahora
     },
 
     /* bloqueo */
@@ -576,7 +576,8 @@
       if (!n) break;
       visto[n.s.id + n.clave] = 1;
       let falta = n.falta; const partes = []; const ids = [];
-      n.e.sobres.filter((o) => o.id !== n.s.id && nivelBal(o) > 0 && c.sob[o.id] && c.sob[o.id].saldo > 0.004)
+      const reservados = App.sobresReservados(c);
+      n.e.sobres.filter((o) => o.id !== n.s.id && !reservados[o.id] && nivelBal(o) > 0 && c.sob[o.id] && c.sob[o.id].saldo > 0.004)
         .sort((x, y) => nivelBal(x) - nivelBal(y) || (x.meta > 0 ? 1 : 0) - (y.meta > 0 ? 1 : 0) || c.sob[y.id].saldo - c.sob[x.id].saldo)
         .forEach((o) => {
           if (!(falta > 0.004)) return;

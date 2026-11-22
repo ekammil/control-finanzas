@@ -280,9 +280,10 @@
     const a = App.state.ajustes;
     const hechos = [];
     let cambio = false;
+    const reservados = App.sobresReservados();
     App.state.espacios.forEach((e) => {
       e.sobres.forEach((s) => {
-        if (!s.sobranteA) return;
+        if (!s.sobranteA || reservados[s.id]) return; // con un pago vencido sin registrar, su dinero se queda en el sobre
         const destino = e.sobres.find((x) => x.id === s.sobranteA);
         if (!destino) return;
         const fin = App.finCicloAnterior(s, hoy);

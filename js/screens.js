@@ -77,7 +77,9 @@
   };
 
   /* Avisos inteligentes del inicio */
-  App.avisos = (c) => {
+  App.avisos = (c, opts) => {
+    const enCampana = !!(opts && opts.campana); // en la campana los pagos vencidos siempre se ven; "Avísame mañana" solo los esconde del Inicio
+    let ocultosVenc = 0;
     // avisos que se pueden quitar (los de pagos, tarjeta y límites de sobre no)
     const quitados = App.state.ajustes.avisosQuitados || {};
     App.quitables = [];
@@ -132,10 +134,11 @@
       const av = Number(p.r.avisar);
       if (p.dias > (isNaN(av) ? 3 : av)) return;
       const kp = 'pago-' + p.tipo + '-' + p.r.id + '-' + p.fecha; // "Avísame mañana": se esconde hoy y vuelve mañana
-      if (quitados[kp] === hoy) return;
+      const venc = p.dias < 0;
+      const pospuesto = quitados[kp] === hoy;
+      if (pospuesto && !(venc && enCampana)) { if (venc) ocultosVenc++; return; }
       const st = p.r.sobre ? c.sob[p.r.sobre] : null;
       const tiene = st ? st.saldo : null;
-      const venc = p.dias < 0;
       const cuando = p.dias === 0 ? 'hoy' : p.dias === 1 ? 'mañana' : venc ? (p.dias === -1 ? 'ayer' : 'hace ' + (-p.dias) + ' días') : 'en ' + p.dias + ' días';
       let estado = '';
       if (p.tipo === 'tarjeta') estado = p.r.estimado ? 'Aproximado, el corte aún no llega.' : 'Para no pagar intereses.';
@@ -144,7 +147,7 @@
         : p.tipo === 'tarjeta' ? '<button class="btn-chico blanco" data-a="pagar-tarjeta" data-id="' + p.r.cuenta + '">Pagar tarjeta</button>'
           : '<button class="btn-chico blanco" data-a="pagar-sobre" data-esp="' + p.r.espacio + '" data-id="' + p.r.id + '" data-f="' + (p.tipo === 'sobre' ? p.fecha : '') + '" data-monto="' + p.r.monto + '">Registrar pago</button>';
       prio.push('<div class="aviso"><div class="ico">' + (p.tipo === 'tarjeta' ? '💳' : I.cal) + '</div><div class="txt"><b>' + U.esc(p.r.nombre) + ' · ' + U.money(p.r.monto) + '</b><p>' + (venc ? '<span class="pasado">Venció ' + cuando + '</span> (' + U.fechaCorta(p.fecha) + '). Págalo cuando puedas. ' : 'Se paga ' + cuando + ' (' + U.fechaCorta(p.fecha) + '). ') + estado + '</p>' +
-        '<div class="acciones">' + boton + '<button class="btn-chico" data-a="aviso-quitar" data-k="' + kp + '">Avísame mañana</button></div></div></div>');
+        '<div class="acciones">' + boton + (venc && enCampana ? '' : '<button class="btn-chico" data-a="aviso-quitar" data-k="' + kp + '">Avísame mañana</button>') + '</div></div></div>');
     });
     // dinero libre sin repartir
     S.espacios.forEach((e) => {
@@ -169,7 +172,7 @@
       quitable('cuadre', '<div class="aviso"><div class="ico">🌙</div><div class="txt"><b>Cuadre de la noche</b><p>Revisa en 1 minuto que tu dinero real coincida.</p>' +
         '<div class="acciones"><button class="btn-chico blanco" data-a="hoja" data-h="cuadre">Cuadrar</button><button class="btn-chico" data-a="cuadre-saltar">Hoy no</button></div></div></div>');
     }
-    App.nAvisos = prio.length + out.length;
+    App.nAvisos = prio.length + out.length + ocultosVenc;
     if (prio.length) {
       const oculto = !!S.ajustes.prioOculto;
       out.unshift('<div class="prio' + (oculto ? ' oculto' : '') + '"><button class="prio-tab" data-a="prio-toggle"><b>⭐ Importantes</b><i class="prio-n">' + prio.length + '</i><span>' + (oculto ? 'Ver ›' : 'Esconder ⌃') + '</span></button>' + (oculto ? '' : prio.join('')) + '</div>');

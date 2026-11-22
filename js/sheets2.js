@@ -622,7 +622,7 @@
     titulo: 'Notificaciones',
     render: () => {
       const a = App.state.ajustes; const c = App.calc();
-      const avisos = App.avisos(c);
+      const avisos = App.avisos(c, { campana: true });
       let y = avisos.length ? avisos.join('') : '<div class="nota" style="text-align:center;padding:18px 0">🔔 Todo en orden. No tienes avisos por ahora.</div>';
       if ((App.quitables || []).length) y += '<button class="btn sec" style="margin-top:10px" data-a="avisos-limpiar">🧹 Quitar los avisos que se pueden quitar</button><p class="nota" style="margin-top:4px">Los de pagos, tarjeta y límites de sobre se quedan hasta que se resuelvan.</p>';
       y += '<div class="etq" style="margin-top:22px">Notificaciones del celular</div>';
