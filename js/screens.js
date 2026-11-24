@@ -43,35 +43,17 @@
       '<div class="leyenda"><span><i style="background:var(--green)"></i>Ingresos <b class="num" style="color:var(--text)">' + U.money0(sem.ing) + '</b></span>' +
       '<span><i style="background:rgba(255,255,255,.55)"></i>Gastos <b class="num" style="color:var(--text)">' + U.money0(sem.gas) + '</b></span></div></div>';
 
-    // espacios
-    h += '<div class="seccion"><div class="seccion-titulo"><h2>Espacios</h2><button data-a="hoja" data-h="mover">' + 'Mover dinero' + '</button></div>';
-    if (!S.espacios.length) h += '<div class="vacio-txt">Aún no tienes espacios.</div>';
-    S.espacios.forEach((e) => {
-      const x = c.esp[e.id];
-      const p = x.presupuesto > 0 ? x.gastadoSemana / x.presupuesto : 0;
-      const est = p > 1.001 ? 'pasado' : p >= 0.8 ? 'cuidado' : 'ok';
-      const pasados = e.sobres.filter((s) => c.sob[s.id].estado === 'pasado' && (s.tipo === 'gasto' || s.tipo === 'limite')).length;
-      h += '<button class="fila" data-a="hoja" data-h="espacio" data-id="' + e.id + '">' +
-        '<div class="ico">' + U.esc(e.icono || '📁') + App.anillo(p, est) + '</div>' +
-        '<div class="txt"><b>' + U.esc(e.nombre) + '</b><small>' +
-        (x.presupuesto > 0 ? 'Gastado ' + U.money0(x.gastadoSemana) + ' de ' + U.money0(x.presupuesto) : e.sobres.length + ' sobres') +
-        (pasados ? ' · <span class="pasado">' + pasados + ' en rojo</span>' : '') + '</small></div>' +
-        '<div class="der"><b class="num">' + U.money(x.real) + '</b><small class="num ' + (x.libre < -0.004 ? 'neg' : '') + '">Libre ' + U.money(x.libre) + '</small></div></button>';
-    });
-    h += '</div>';
-
-    // cuentas
-    h += '<div class="seccion"><div class="seccion-titulo"><h2>Cuentas</h2><button data-a="hoja" data-h="cuadre">Cuadrar</button></div>';
-    S.cuentas.forEach((ct) => {
-      const v = c.cuentas[ct.id];
-      let sub = '';
-      if (App.esCredito(ct)) { const pp = App.pagoTarjeta(ct, c); sub = v < -0.004 ? (pp && pp.monto > 0.004 ? 'Pagar ' + U.money0(pp.monto) + ' el ' + U.fechaCorta(pp.fecha) : 'Lo que debes') : 'Tarjeta de crédito'; }
-      else if (ct.partes && c.partes[ct.id]) sub = 'Billetes ' + U.money0(c.partes[ct.id].b) + ' · Monedas ' + U.money0(c.partes[ct.id].m);
-      h += '<button class="fila" data-a="hoja" data-h="cuenta" data-id="' + ct.id + '">' +
-        '<div class="ico">' + U.esc(ct.icono || '💳') + '</div>' +
-        '<div class="txt"><b>' + U.esc(ct.nombre) + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>' +
-        '<div class="der"><b class="num ' + (v < -0.004 ? 'neg' : '') + '">' + U.money(v) + '</b></div></button>';
-    });
+    // atajos a las demás pestañas (así el Inicio no se llena de listas)
+    const t = c.tot;
+    const nSob = S.espacios.reduce((n, e) => n + e.sobres.length, 0);
+    const sigPago = App.proximosPagos(c)[0];
+    const nMetas = S.espacios.reduce((n, e) => n + e.sobres.filter((x) => x.meta > 0 || x.tipo === 'deuda').length, 0);
+    const atajo = (p, ico, tit, sub, num) => '<button class="atajo" data-a="ir" data-p="' + p + '"><span class="ico">' + ico + '</span><b>' + tit + '</b><small>' + sub + '</small><span class="num">' + num + '</span></button>';
+    h += '<div class="seccion"><div class="seccion-titulo"><h2>Explora</h2></div><div class="atajos">' +
+      atajo('sobres', '🗂️', 'Sobres', S.espacios.length + ' espacios · ' + nSob + ' sobres', U.money0(Math.max(0, t.real - t.disponible)) + ' apartado') +
+      atajo('cuentas', '🏦', 'Cuentas', S.cuentas.length + (S.cuentas.length === 1 ? ' cuenta' : ' cuentas'), U.money0(t.real)) +
+      atajo('metas', '🎯', 'Metas y pagos', sigPago ? U.esc(sigPago.r.nombre) + ' · ' + U.fechaCorta(sigPago.fecha) : 'Sin pagos próximos', nMetas + (nMetas === 1 ? ' meta' : ' metas')) +
+      atajo('analisis', '📊', 'Análisis', 'A dónde se va tu dinero', 'Gastos ' + U.money0(sem.gas)) + '</div></div>';
     h += '</div></div>';
     return h;
   };
@@ -93,6 +75,7 @@
     const prio = []; // importantes: pagos, tarjeta y límites de sobre (no se quitan, solo se esconden)
     const hoy = U.today();
     App.avisosBal().forEach((x) => out.push(x));
+    if (!enCampana) App.avisosSinIngreso().forEach((x) => out.push(x));
     // bandeja de Apple Pay
     S.bandeja.forEach((b) => {
       out.push('<div class="aviso"><div class="ico">' + I.inbox + '</div><div class="txt"><b>Pago con tarjeta: ' + U.money(b.monto) + '</b><p>' + U.esc(b.comercio || 'Sin comercio') + ' · ' + U.fechaRel(b.fecha || hoy) + '</p>' +
@@ -324,7 +307,7 @@
     const total = movs.length;
     const visibles = movs.filter((m) => m.fecha >= limite);
 
-    let h = '<div class="pantalla"><div class="top"><h1>Movimientos</h1></div>';
+    let h = '<div class="pantalla"><div class="top"><h1>Movimientos</h1></div>' + segMovs('movs');
     h += '<label class="buscar">' + I.search + '<input type="search" placeholder="Buscar" value="' + U.esc(ui.buscar) + '" data-in="buscar"></label>';
     h += '<div class="chips" style="margin-top:12px">' +
       [['todo', 'Todo'], ['gastos', 'Gastos'], ['ingresos', 'Ingresos'], ['movidos', 'Movimientos internos']].map(([k, t]) => '<button class="chip ' + (ui.filtro === k ? 'on' : '') + '" data-a="filtro" data-v="' + k + '">' + t + '</button>').join('') +
@@ -360,7 +343,7 @@
   App.pantallaMetas = () => {
     const S = App.state;
     const c = App.calc();
-    let h = '<div class="pantalla"><div class="top"><h1>Metas</h1><button class="icon-btn" data-a="hoja" data-h="nueva-meta" aria-label="Nueva meta">' + I.plus + '</button></div>';
+    let h = '<div class="pantalla"><div class="top"><h1>Metas y pagos</h1><button class="icon-btn" data-a="hoja" data-h="nueva-meta" aria-label="Nueva meta">' + I.plus + '</button></div>' + segSob('metas');
     const metas = [];
     S.espacios.forEach((e) => e.sobres.forEach((s) => { if (s.meta > 0 || s.tipo === 'deuda') metas.push({ e, s, x: c.sob[s.id] }); }));
     if (!metas.length) h += '<div class="vacio-txt">Crea una meta para ver cuánto te falta y cuándo la lograrás.</div>';
@@ -413,6 +396,145 @@
     return h;
   };
 
+  /* pestañas internas */
+  const segSob = (p) => '<div class="seg pestanas"><button class="' + (p === 'sobres' ? 'on' : '') + '" data-a="ir" data-p="sobres">Sobres</button><button class="' + (p === 'metas' ? 'on' : '') + '" data-a="ir" data-p="metas">Metas y pagos</button></div>';
+  const segMovs = (p) => '<div class="seg pestanas"><button class="' + (p === 'movs' ? 'on' : '') + '" data-a="ir" data-p="movs">Movimientos</button><button class="' + (p === 'analisis' ? 'on' : '') + '" data-a="ir" data-p="analisis">Análisis</button></div>';
+  App.I.chart = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>';
+
+  /* ---------------- SOBRES ---------------- */
+  App.pantallaSobres = () => {
+    const S = App.state;
+    const c = App.calc();
+    let h = '<div class="pantalla"><div class="top"><h1>Sobres</h1><button class="icon-btn" data-a="hoja" data-h="organizar" aria-label="Organizar espacios y sobres">' + I.edit + '</button></div>' + segSob('sobres');
+    if (!S.espacios.length) h += '<div class="vacio-txt">Aún no tienes espacios.</div>';
+    S.espacios.forEach((e) => {
+      const x = c.esp[e.id];
+      const p = x.presupuesto > 0 ? x.gastadoSemana / x.presupuesto : 0;
+      h += '<div class="bloque-esp"><button class="esp-cab" data-a="hoja" data-h="espacio" data-id="' + e.id + '">' +
+        '<div class="ico">' + U.esc(e.icono || '📁') + '</div><div class="txt"><b>' + U.esc(e.nombre) + '</b><small>' +
+        (x.presupuesto > 0 ? 'Gastado ' + U.money0(x.gastadoSemana) + ' de ' + U.money0(x.presupuesto) + ' esta semana' : e.sobres.length + ' sobres') + '</small></div>' +
+        '<div class="der"><b class="num">' + U.money(x.real) + '</b><small class="num ' + (x.libre < -0.004 ? 'neg' : '') + '">Libre ' + U.money(x.libre) + '</small></div></button>';
+      if (x.presupuesto > 0) h += App.barraProg(p, p > 1.001 ? 'pasado' : p >= 0.8 ? 'cuidado' : '');
+      e.sobres.forEach((sb) => {
+        const st = c.sob[sb.id]; if (!st) return;
+        const clase = (sb.tipo === 'gasto' || sb.tipo === 'limite') ? st.estado : (sb.meta > 0 ? 'azul' : st.estado);
+        const conBarra = ((sb.tipo === 'gasto' || sb.tipo === 'limite') && st.cuota > 0) || sb.meta > 0 || sb.tipo === 'deuda';
+        h += '<button class="fila" data-a="hoja" data-h="sobre" data-esp="' + e.id + '" data-id="' + sb.id + '">' +
+          '<div class="ico">' + U.esc(sb.icono) + '</div><div class="txt"><b>' + U.esc(sb.nombre) + (sb.disponible ? ' <small style="display:inline;color:var(--green)">· libre</small>' : '') + (sb.candado ? ' 🔒' : '') + '</b><small>' + App.subCortoSobre(sb, st) + '</small>' +
+          (conBarra ? App.barraProg(st.progreso, clase) : '') + '</div>' +
+          '<div class="der"><b class="num ' + (st.saldo < -0.004 ? 'neg' : '') + '">' + U.money(st.saldo) + '</b></div></button>';
+      });
+      h += '<button class="btn sec" style="height:44px;font-size:15px;margin-top:8px" data-a="hoja" data-h="sobre-editar" data-esp="' + e.id + '">' + I.plus + ' Agregar sobre</button></div>';
+    });
+    h += '<button class="btn sec" data-a="hoja" data-h="mover">' + I.swap + ' Mover dinero</button></div>';
+    return h;
+  };
+
+  /* ---------------- CUENTAS ---------------- */
+  App.pantallaCuentas = () => {
+    const S = App.state;
+    const c = App.calc();
+    const t = c.tot;
+    let h = '<div class="pantalla"><div class="top"><h1>Cuentas</h1><button class="icon-btn" data-a="hoja" data-h="cuentas" aria-label="Administrar cuentas">' + I.edit + '</button></div>';
+    h += '<div class="hero"><div class="etiqueta">Dinero real en tus cuentas</div><div class="grande">' + App.montoGrande(t.real) + '</div></div>';
+    h += '<div class="seccion"><div class="seccion-titulo"><h2>Tus cuentas</h2><button data-a="hoja" data-h="cuadre">Cuadrar</button></div>';
+    S.cuentas.forEach((ct) => {
+      const v = c.cuentas[ct.id];
+      let sub = '';
+      if (App.esCredito(ct)) { const pp = App.pagoTarjeta(ct, c); sub = v < -0.004 ? (pp && pp.monto > 0.004 ? 'Pagar ' + U.money0(pp.monto) + ' el ' + U.fechaCorta(pp.fecha) : 'Lo que debes') : 'Tarjeta de crédito'; }
+      else if (ct.partes && c.partes[ct.id]) sub = 'Billetes ' + U.money0(c.partes[ct.id].b) + ' · Monedas ' + U.money0(c.partes[ct.id].m);
+      h += '<button class="fila" data-a="hoja" data-h="cuenta" data-id="' + ct.id + '">' +
+        '<div class="ico">' + U.esc(ct.icono || '💳') + '</div>' +
+        '<div class="txt"><b>' + U.esc(ct.nombre) + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>' +
+        '<div class="der"><b class="num ' + (v < -0.004 ? 'neg' : '') + '">' + U.money(v) + '</b></div></button>';
+    });
+    h += '</div>';
+    h += '<div class="dos" style="margin-top:16px"><button class="btn sec" style="margin:0" data-a="hoja" data-h="mover">' + I.swap + ' Mover dinero</button><button class="btn sec" style="margin:0" data-a="hoja" data-h="cuadre">' + I.scale + ' Cuadrar</button></div>';
+    h += '</div>';
+    return h;
+  };
+
+  /* ---------------- ANÁLISIS ---------------- */
+  App.pantallaAnalisis = () => {
+    const S = App.state; const ui = App.ui;
+    const rango = ui.rangoAn || 'semana';
+    const hoy = U.today();
+    const dias = rango === 'mes' ? 30 : 7;
+    const ini = U.addDays(hoy, -(dias - 1));
+    const prevIni = U.addDays(ini, -dias), prevFin = U.addDays(ini, -1);
+    let ing = 0, gas = 0, gasPrev = 0; const porSobre = {}; const porDia = {};
+    S.movs.forEach((m) => {
+      if (m.tipo === 'ingreso' && m.fecha >= ini && m.fecha <= hoy) ing += Number(m.monto);
+      if (m.tipo !== 'gasto') return;
+      const v = Number(m.monto);
+      if (m.fecha >= ini && m.fecha <= hoy) {
+        gas += v; porDia[m.fecha] = (porDia[m.fecha] || 0) + v;
+        const sb = m.espacio && m.sobre ? App.sobre(m.espacio, m.sobre) : null;
+        const k = sb ? sb.icono + ' ' + sb.nombre : '💸 Sin sobre';
+        porSobre[k] = (porSobre[k] || 0) + v;
+      } else if (m.fecha >= prevIni && m.fecha <= prevFin) gasPrev += v;
+    });
+    const lista = Object.keys(porSobre).map((k) => [k, porSobre[k]]).sort((a, b) => b[1] - a[1]);
+    const maxS = lista.length ? lista[0][1] : 1;
+    let barras = [];
+    if (rango === 'semana') for (let i = dias - 1; i >= 0; i--) { const f = U.addDays(hoy, -i); barras.push([['L', 'M', 'M', 'J', 'V', 'S', 'D'][U.dow(f)], porDia[f] || 0]); }
+    else for (let w = 6; w >= 0; w--) { let t = 0; const fin = U.addDays(hoy, -w * 4); for (let d = 0; d < 4; d++) t += porDia[U.addDays(fin, -d)] || 0; barras.push([U.fechaCorta(U.addDays(fin, -3)).replace(/ .*/, ''), t]); }
+    const maxB = Math.max.apply(null, barras.map((b) => b[1]).concat([1]));
+    const dif = gasPrev > 0 ? Math.round((gas - gasPrev) / gasPrev * 100) : null;
+    let h = '<div class="pantalla"><div class="top"><h1>Movimientos</h1></div>' + segMovs('analisis');
+    h += '<div class="rangos" style="justify-content:flex-start;margin-top:14px">' + [['semana', '7 días'], ['mes', '30 días']].map(([r, t]) => '<button class="' + (r === rango ? 'on' : '') + '" data-a="rango-an" data-r="' + r + '">' + t + '</button>').join('') + '</div>';
+    h += '<div class="an-tot"><div><span>Ingresos</span><b class="num" style="color:var(--green)">' + U.money0(ing) + '</b></div><div><span>Gastos</span><b class="num">' + U.money0(gas) + '</b></div><div><span>Neto</span><b class="num ' + (ing - gas < 0 ? 'neg' : '') + '">' + U.money0(ing - gas) + '</b></div></div>';
+    if (dif !== null) h += '<p class="nota" style="margin-top:10px">' + (dif > 0 ? '📈 Gastaste ' + dif + '% más' : dif < 0 ? '📉 Gastaste ' + (-dif) + '% menos' : 'Gastaste igual') + ' que en los ' + dias + ' días anteriores (' + U.money0(gasPrev) + ').</p>';
+    h += '<div class="seccion"><div class="seccion-titulo"><h2>' + (rango === 'semana' ? 'Gasto por día' : 'Gasto cada 4 días') + '</h2></div><div class="an-dias">' +
+      barras.map((b) => '<div><i style="height:' + Math.max(3, b[1] / maxB * 88).toFixed(0) + 'px"></i><span>' + b[0] + '</span></div>').join('') + '</div></div>';
+    h += '<div class="seccion"><div class="seccion-titulo"><h2>En qué se fue</h2></div>';
+    if (!lista.length) h += '<div class="vacio-txt">No hay gastos en este periodo.</div>';
+    lista.slice(0, 10).forEach(([k, v]) => { h += '<div class="an-fila"><span class="n">' + U.esc(k) + '</span><span class="b"><i style="width:' + (v / maxS * 100).toFixed(0) + '%"></i></span><span class="v num">' + U.money0(v) + '</span></div>'; });
+    h += '</div></div>';
+    return h;
+  };
+
+  /* ---------------- AVISO: "no se repartió porque no hay ingreso" ----------------
+     Según cada cuánto recibes dinero (Ajustes): si en ese periodo no entró nada,
+     lo dice, para que no parezca que la app dejó de repartir. */
+  const PERIODOS = {
+    diario: { pasado: 'ayer', actual: 'hoy', nombre: 'diario' },
+    semanal: { pasado: 'la semana pasada', actual: 'esta semana', nombre: 'semanal' },
+    quincenal: { pasado: 'la quincena pasada', actual: 'esta quincena', nombre: 'quincenal' },
+    mensual: { pasado: 'el mes pasado', actual: 'este mes', nombre: 'mensual' },
+    semestral: { pasado: 'el semestre pasado', actual: 'este semestre', nombre: 'semestral' },
+    anual: { pasado: 'el año pasado', actual: 'este año', nombre: 'anual' }
+  };
+  App.sinIngreso = () => {
+    const S = App.state; const a = S.ajustes;
+    if (a.onboarding || !S.cuentas.length) return null;
+    const f = U.frec(a.frecIngreso); const hoy = U.today();
+    const nom = PERIODOS[f] || { pasado: 'el periodo pasado', actual: 'este periodo', nombre: 'de ' + (U.FREC_CADA[f] || '') };
+    const cur = U.periodo(f, hoy); const prev = U.periodo(f, U.addDays(cur.ini, -1));
+    const sinPasado = [], sinActual = [];
+    S.espacios.forEach((e) => {
+      const ing = S.movs.filter((m) => m.tipo === 'ingreso' && m.espacio === e.id).map((m) => m.fecha).sort();
+      if (!ing.length) return; // si nunca le ha entrado dinero a este espacio, no hay nada que avisar
+      const entro = (d1, d2) => ing.some((d) => d >= d1 && d < d2);
+      if (ing[0] < prev.fin && !entro(prev.ini, prev.fin)) sinPasado.push(e);
+      if (ing[0] < cur.fin && !entro(cur.ini, cur.fin)) sinActual.push(e);
+    });
+    if (!sinPasado.length && !sinActual.length) return null;
+    return { f, nom, cur, prev, sinPasado, sinActual };
+  };
+  App.avisosSinIngreso = () => {
+    const r = App.sinIngreso(); if (!r) return [];
+    const quitados = App.state.ajustes.avisosQuitados || {};
+    const key = 'sining-' + r.f + '-' + r.cur.ini;
+    if (quitados[key] === U.today()) return [];
+    const nombres = (l) => l.map((e) => U.esc(e.icono + ' ' + e.nombre)).join(', ');
+    let txt = '';
+    if (r.sinPasado.length) txt += '<p>No se repartió el ingreso ' + r.nom.nombre + ' de <b>' + r.nom.pasado + '</b> porque no entró dinero' + (App.state.espacios.length > 1 ? ' en ' + nombres(r.sinPasado) : '') + '.</p>';
+    if (r.sinActual.length) txt += '<p>' + (r.f === 'diario' ? 'Hoy' : 'En ' + r.nom.actual) + ' todavía no hay ingreso ' + r.nom.nombre + (App.state.espacios.length > 1 ? ' en ' + nombres(r.sinActual) : '') + ': no hay nada que repartir. En cuanto lo registres, se aparta solo.</p>';
+    App.quitables = App.quitables || []; App.quitables.push(key);
+    return ['<div class="aviso sin-ingreso"><button class="aviso-x" data-a="aviso-quitar" data-k="' + key + '" aria-label="Quitar">✕</button><div class="ico">💤</div><div class="txt"><b>Sin ingreso ' + r.nom.nombre + ' que repartir</b>' + txt + '</div></div>'];
+  };
+
   /* ---------------- AJUSTES ---------------- */
   App.pantallaAjustes = () => {
     const S = App.state;
@@ -422,13 +544,14 @@
     let h = '<div class="pantalla lista-aj"><div class="top"><h1>Ajustes</h1></div>';
     h += '<div class="seccion"><div class="seccion-titulo"><h2>Tú</h2></div>' +
       fila('hoja', I.user, 'Nombre', U.esc(S.perfil.nombre || 'Sin nombre'), 'data-h="perfil"') +
-      fila('hoja', I.palette, 'Fondo', App.FONDOS.find((f) => f.id === a.fondo).nombre, 'data-h="fondo"') + '</div>';
+      fila('hoja', I.palette, 'Tema de color', App.temaActual().nombre, 'data-h="tema"') +
+      fila('hoja', I.moon, 'Fondo', (App.FONDOS.find((f) => f.id === a.fondo) || App.FONDOS[0]).nombre, 'data-h="fondo"') + '</div>';
     h += '<div class="seccion"><div class="seccion-titulo"><h2>Organización</h2></div>' +
       fila('hoja', I.layers, 'Espacios y sobres', S.espacios.length + ' espacios · ' + S.espacios.reduce((n, e) => n + e.sobres.length, 0) + ' sobres', 'data-h="organizar"') +
       fila('hoja', I.wallet, 'Cuentas', S.cuentas.map((c) => c.nombre).join(', ') || 'Ninguna', 'data-h="cuentas"') +
       fila('hoja', I.cal, 'Cada cuánto recibes dinero', U.FREC_TXT[a.frecIngreso] || 'Semanal', 'data-h="frec-ingreso"') +
       fila('hoja', I.cal, 'Día en que empieza tu mes', 'Día ' + (a.diaCero || 1) + ' de cada mes', 'data-h="dia-cero"') +
-      fila('ir', I.target, 'Próximos pagos', 'Fechas de pago y avisos', 'data-p="metas"') + '</div>';
+      fila('ir', I.target, 'Metas y próximos pagos', 'Fechas de pago y avisos', 'data-p="metas"') + '</div>';
     h += '<div class="seccion"><div class="seccion-titulo"><h2>Hábitos</h2></div>' +
       sw('cuadreNoche', 'Cuadre de la noche', 'Desde las ' + App.horaTxt(a.horaCuadre) + ' te sugiere revisar tu dinero real') +
       sw('repartirSolo', 'Repartir solo', 'Lo que te entre y lo que quede libre se aparta solo en tus sobres') +
@@ -444,7 +567,7 @@
       fila('hoja', I.phone, 'Instalar en tu teléfono', 'iPhone y Android', 'data-h="instalar"') +
       fila('hoja', I.apple, 'Atajos del iPhone', 'Gasto rápido y Apple Pay', 'data-h="atajo"') + '</div>';
     h += '<div class="seccion"><button class="btn peligro" data-a="hoja" data-h="borrar">Borrar todos mis datos</button>' +
-      '<p class="nota" style="text-align:center">Control de Finanzas · v1.8 · Tus datos viven en este teléfono.</p></div>';
+      '<p class="nota" style="text-align:center">Control de Finanzas · v1.9 · Tus datos viven en este teléfono.</p></div>';
     h += '</div>';
     return h;
   };
@@ -452,10 +575,11 @@
   /* ---------------- NAVEGACIÓN ---------------- */
   App.navHTML = () => {
     const p = App.ui.pantalla;
-    const b = (id, ico, t) => '<button class="' + (p === id ? 'on' : '') + '" data-a="ir" data-p="' + id + '" aria-label="' + t + '">' + ico + '</button>';
-    return '<nav class="nav"><div class="nav-in">' + b('inicio', I.home, 'Inicio') + b('movs', I.list, 'Movimientos') +
+    const grupo = { sobres: ['sobres', 'metas'], movs: ['movs', 'analisis'] };
+    const b = (id, ico, t) => '<button class="' + ((grupo[id] || [id]).includes(p) ? 'on' : '') + '" data-a="ir" data-p="' + id + '" aria-label="' + t + '">' + ico + '</button>';
+    return '<nav class="nav"><div class="nav-in">' + b('inicio', I.home, 'Inicio') + b('sobres', I.layers, 'Sobres') +
       '<button class="fab" data-a="hoja" data-h="registro" aria-label="Registrar">' + I.plus + '</button>' +
-      b('metas', I.target, 'Metas') + b('ajustes', I.gear, 'Ajustes') + '</div></nav>';
+      b('movs', I.list, 'Movimientos') + b('cuentas', I.wallet, 'Cuentas') + b('ajustes', I.gear, 'Ajustes') + '</div></nav>';
   };
 
   /* ---------------- BIENVENIDA ---------------- */
