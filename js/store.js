@@ -21,8 +21,26 @@
     { id: 'bosque', nombre: 'Bosque' },
     { id: 'grafito', nombre: 'Grafito' },
     { id: 'negro', nombre: 'Negro' },
-    { id: 'planetas', nombre: 'Planetas', nuevo: true }
+    { id: 'planetas', nombre: 'Planetas' },
+    { id: 'cielo', nombre: 'Cielo', nuevo: true },
+    { id: 'mar', nombre: 'Mar', nuevo: true },
+    { id: 'luciernagas', nombre: 'Luciérnagas', nuevo: true },
+    { id: 'lluvia', nombre: 'Lluvia', nuevo: true },
+    { id: 'nieve', nombre: 'Nieve', nuevo: true },
+    { id: 'boreal', nombre: 'Aurora boreal', nuevo: true },
+    { id: 'ciudad', nombre: 'Ciudad de noche', nuevo: true }
   ];
+  // temas de color: la app sigue negra, con un toque del color elegido
+  App.TEMAS = [
+    { id: 'clasico', nombre: 'Clásico', c: '#f5f5f7' },
+    { id: 'verde', nombre: 'Verde', c: '#3ddc97' },
+    { id: 'azul', nombre: 'Azul', c: '#5b9dff' },
+    { id: 'rojo', nombre: 'Rojo', c: '#ff5a5f' },
+    { id: 'rosa', nombre: 'Rosa', c: '#ff7ab8' },
+    { id: 'morado', nombre: 'Morado', c: '#a78bfa' },
+    { id: 'naranja', nombre: 'Naranja', c: '#ffa24a' }
+  ];
+  App.temaActual = () => App.TEMAS.find((t) => t.id === App.state.ajustes.tema) || App.TEMAS[0];
 
   App.EMOJIS = ['👤', '🏪', '🎰', '💼', '🏠', '🍽️', '🚌', '🎉', '🚗', '🛟', '💳', '📅', '📦', '📈', '🎓', '💊', '🎁', '👕', '📱', '🐶', '✈️', '🏋️', '☕', '🎮', '🧾', '💡', '🛒', '🏦', '💵', '🪙', '💰', '🎯', '⭐', '🔧', '❤️', '📚',
     '🍔', '🌮', '🍕', '🥗', '🍎', '🥩', '🍺', '🍷', '🧃', '🍰', '⛽', '🚕', '🚇', '🛵', '🚲', '🅿️', '🛠️', '🧰', '🧹', '🧺', '🛋️', '🔌', '💧', '🔥', '📶', '🌐', '💻', '🖥️', '🎧', '📺', '🎬', '🎵', '📷', '🕹️', '⚽', '🏀', '🎾', '🧘', '💪', '💇', '💅', '🧴', '🪥', '🦷', '🩺', '🏥', '👶', '🧸', '🐱', '🐾', '🌱', '🌸', '🎂', '🎈', '💍', '👗', '👟', '🕶️', '⌚', '🎒', '✏️', '📝', '🏫', '🏢', '🧑‍💻', '🤝', '📣', '🚚', '📮', '🏷️', '🧮', '💸', '💲', '🏧', '📊', '📉', '🔒', '🛡️', '⚖️', '🏖️', '🏕️', '🗺️', '🎟️', '🙏', '⛪', '🎄', '🌙', '☀️', '⚡', '🔔', '📆', '⏰', '🚨', '✅', '🌟', '💎', '🏆', '🍀'];
@@ -33,6 +51,7 @@
     perfil: { nombre: '' },
     ajustes: {
       fondo: 'aurora',
+      tema: 'clasico',
       pin: null,
       vibracion: true,
       cuadreNoche: false,
