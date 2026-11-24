@@ -7,12 +7,15 @@
   App.render = () => {
     const S = App.state;
     document.body.dataset.fondo = S.ajustes.fondo || 'aurora';
+    document.body.dataset.tema = App.temaActual().id;
     if (S.ajustes.fondo === 'planetas') App.cosmos();
+    if (App.fondoVivo) App.fondoVivo(S.ajustes.fondo);
     if (App.ui.bloqueado) { document.body.dataset.pantalla = 'ajustes'; $app().innerHTML = App.pantallaBloqueo(); return; }
     if (S.ajustes.onboarding || !S.cuentas.length) { document.body.dataset.pantalla = 'inicio'; $app().innerHTML = App.pantallaBienvenida(); return; }
     const p = App.ui.pantalla;
     document.body.dataset.pantalla = p;
-    const html = p === 'movs' ? App.pantallaMovs() : p === 'metas' ? App.pantallaMetas() : p === 'ajustes' ? App.pantallaAjustes() : App.pantallaInicio();
+    const PANT = { movs: App.pantallaMovs, analisis: App.pantallaAnalisis, sobres: App.pantallaSobres, metas: App.pantallaMetas, cuentas: App.pantallaCuentas, ajustes: App.pantallaAjustes };
+    const html = (PANT[p] || App.pantallaInicio)();
     $app().innerHTML = html + App.navHTML();
     if (App.h) App.renderHoja();
   };
@@ -94,6 +97,7 @@
     },
     'cerrar-hoja': () => App.cerrarHoja(true),
     'volver-hoja': () => App.cerrarHoja(false),
+    'rango-an': (el) => { App.ui.rangoAn = el.dataset.r; refrescar(); },
     'rango': (el) => { App.state.ajustes.rango = el.dataset.r; App.save(); refrescar(); },
     'filtro': (el) => { App.ui.filtro = App.ui.filtro === el.dataset.v && el.dataset.v !== 'todo' ? 'todo' : el.dataset.v; refrescar(); },
     'filtro-esp': (el) => { App.ui.filtroEsp = App.ui.filtroEsp === el.dataset.v ? '' : el.dataset.v; refrescar(); },
@@ -434,7 +438,8 @@
       App.state.recurrentes = App.state.recurrentes.filter((r) => r.id !== App.h.id); App.save(); App.cerrarHoja(true); refrescar();
     },
     'perfil-guardar': () => { App.state.perfil.nombre = App.h.nombre.trim(); App.save(); App.cerrarHoja(true); refrescar(); },
-    'fondo': (el) => { App.state.ajustes.fondo = el.dataset.v; App.save(); if (el.dataset.v === 'planetas') App.cosmos(); document.body.dataset.fondo = el.dataset.v; App.renderHoja(); },
+    'fondo': (el) => { App.state.ajustes.fondo = el.dataset.v; App.save(); if (el.dataset.v === 'planetas') App.cosmos(); document.body.dataset.fondo = el.dataset.v; if (App.fondoVivo) App.fondoVivo(el.dataset.v); App.renderHoja(); },
+    'tema': (el) => { App.state.ajustes.tema = el.dataset.v; App.save(); document.body.dataset.tema = App.temaActual().id; U.haptic(); App.renderHoja(); App.render(); },
     'reg-limite': () => { if (App.h) App.abrirHoja('limite-tarjeta', { id: App.h.cuenta }, true); },
     'lim-chip': (el) => { App.h.limiteUso = el.dataset.v; App.renderHoja(); },
     'lim-guardar': () => {
